@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Lot 26 Box Lookup</title>
+<style>
+  :root {
+    box-sizing: border-box;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    --bg: #ffffff; --ink: #111111; --muted: #5a5a5a; --line: #d9d9d9; --panel: #f3f3f3;
+    --btn: #111111; --btn-ink: #ffffff; --ok: #1E8A4C; --warn: #C8102E;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) { --bg: #141414; --ink: #f2f2f2; --muted: #b0b0b0; --line: #333; --panel: #1f1f1f; --btn: #f2f2f2; --btn-ink: #111; }
+  }
+  :root[data-theme="dark"] { --bg: #141414; --ink: #f2f2f2; --muted: #b0b0b0; --line: #333; --panel: #1f1f1f; --btn: #f2f2f2; --btn-ink: #111; }
+  html { scroll-padding-top: env(safe-area-inset-top, 0px); }
+  html, body { height: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 17px/1.35 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 560px; margin: 0 auto; padding: 14px 14px 40px; }
+  h1 { font-size: 20px; margin: 4px 0 2px; font-weight: 700; }
+  .sub { color: var(--muted); font-size: 14px; margin: 0 0 12px; }
+  button { font: inherit; font-weight: 600; border: 0; border-radius: 10px; padding: 13px 16px; background: var(--btn); color: var(--btn-ink); cursor: pointer; }
+  button.quiet { background: var(--panel); color: var(--ink); border: 1px solid var(--line); }
+  .filebtn { display: inline-block; text-align: center; font-weight: 600; border-radius: 10px; padding: 13px 16px; cursor: pointer; position: relative; overflow: hidden; }
+  .filebtn.quiet { background: var(--panel); color: var(--ink); border: 1px solid var(--line); }
+  .filebtn input { position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; cursor: pointer; font-size: 100px; }
+  button:focus-visible, input:focus-visible { outline: 3px solid #1F5FBF; outline-offset: 2px; }
+  .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .row > * { flex: 1 1 auto; }
+  input[type=text] { font: inherit; font-size: 22px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); color: var(--ink); width: 100%; box-sizing: border-box; letter-spacing: .04em; }
+  .scan { position: relative; background: #000; border-radius: 12px; overflow: hidden; aspect-ratio: 4/3; display: none; margin: 10px 0; }
+  .scan.on { display: block; }
+  .scan video { width: 100%; height: 100%; object-fit: cover; }
+  .scan .frame { position: absolute; inset: 14% 12%; border: 3px solid rgba(255,255,255,.85); border-radius: 10px; pointer-events: none; }
+  .status { font-size: 15px; color: var(--muted); margin: 8px 0 0; min-height: 1.3em; }
+  .status.warn { color: var(--warn); }
+  .status.ok { color: var(--ok); }
+  hr { border: 0; border-top: 1px solid var(--line); margin: 18px 0; }
+
+  /* Result: mirrors the printed label */
+  .label { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; margin-top: 14px; background: #fff; color: #111; }
+  .block { padding: 12px 14px 14px; color: #fff; }
+  .block.dark-ink { color: #111; }
+  .block .top { display: flex; justify-content: space-between; font-weight: 700; font-size: 18px; }
+  .block .stage { font-weight: 800; font-size: clamp(34px, 11vw, 52px); line-height: 1.05; letter-spacing: .01em; margin-top: 4px; }
+  .hazard { background: repeating-linear-gradient(45deg, #F2C230 0 18px, #111 18px 30px); }
+  .hazard .top, .hazard .stage { background: #111; color: #fff; display: inline-block; padding: 2px 10px; border-radius: 6px; }
+  .hazard .top { display: flex; }
+  .body { padding: 12px 14px 14px; }
+  .final { font-size: 15px; color: #555; }
+  .final b { display: block; color: #111; font-size: 26px; line-height: 1.15; }
+  .setband { background: #111; color: #fff; text-align: center; font-weight: 700; padding: 8px 10px; border-radius: 8px; margin: 10px 0; }
+  dl { margin: 12px 0 0; display: grid; grid-template-columns: 9.5em 1fr; gap: 6px 10px; font-size: 16px; }
+  dt { color: #666; } dd { margin: 0; overflow-wrap: anywhere; }
+  .hand { font-size: 22px; line-height: 1.25; margin: 10px 0 0; white-space: pre-wrap; }
+  .unprinted { background: #fff7d6; border-left: 4px solid #F2C230; padding: 8px 10px; margin-top: 10px; font-size: 18px; white-space: pre-wrap; }
+  .sight { margin-top: 12px; font-size: 15px; color: #444; }
+  .sight li { margin: 2px 0; }
+  .empty { padding: 26px 14px; text-align: center; color: var(--muted); border: 1px dashed var(--line); border-radius: 12px; margin-top: 14px; }
+
+  details { margin-top: 10px; }
+  summary { cursor: pointer; font-weight: 600; }
+  .log { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px; white-space: pre; overflow-x: auto; max-height: 220px; }
+  .chips { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  .chips button { flex: 1 1 30%; padding: 11px 8px; }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>Lot 26 Box Lookup</h1>
+  <p class="sub" id="inv-status">No inventory loaded yet.</p>
+
+  <div class="row">
+    <button id="btn-scan">Scan a label</button>
+    <label class="filebtn quiet" for="file-inv">Load inventory.csv<input id="file-inv" type="file" accept=".csv,text/csv,text/plain,*/*"></label>
+  </div>
+  <div class="row" style="margin-top:8px">
+    <label class="filebtn quiet" for="file-log">Load checkpoint_log.csv (optional)<input id="file-log" type="file" accept=".csv,text/csv,text/plain,*/*"></label>
+    <button id="btn-paste" class="quiet">Paste CSV text instead</button>
+  </div>
+  <div id="paste-box" hidden style="margin-top:8px">
+    <p class="sub">Open inventory.csv in Drive or Sheets, select all, copy, and paste it here. Works in any viewer, including the Claude app.</p>
+    <textarea id="paste-text" rows="6" style="width:100%;box-sizing:border-box;font:13px ui-monospace,monospace;border:1px solid var(--line);border-radius:10px;padding:8px;background:var(--bg);color:var(--ink)" placeholder="id,class,dest,stage,..."></textarea>
+    <div class="row" style="margin-top:6px">
+      <button id="btn-paste-inv" class="quiet">Use as inventory</button>
+      <button id="btn-paste-log" class="quiet">Use as checkpoint log</button>
+    </div>
+  </div>
+
+  <div class="scan" id="scan"><video id="video" playsinline muted></video><div class="frame"></div></div>
+  <p class="status" id="scan-status"></p>
+
+  <div class="row" style="margin-top:10px">
+    <input id="manual" type="text" inputmode="numeric" placeholder="or type a number: 052, F013, E002" autocomplete="off">
+    <button id="btn-go" class="quiet" style="flex:0 0 auto">Look up</button>
+  </div>
+
+  <div id="result"></div>
+
+  <hr>
+  <details>
+    <summary>Sightings logged on this device</summary>
+    <p class="sub">Each "Log sighting" adds a row here. Copy the rows into checkpoint_log.csv when you're back at the laptop.</p>
+    <div class="log" id="log-view">(none yet)</div>
+    <div class="row" style="margin-top:8px">
+      <button id="btn-copy" class="quiet">Copy rows</button>
+      <button id="btn-share" class="quiet">Share rows</button>
+      <button id="btn-clearlog" class="quiet">Clear rows</button>
+    </div>
+  </details>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"></script>
+<script>
+(function () {
+  // ---- namespace (mirrors make_labels.py) ----
+  const F1 = new Set(["FOYER","GARAGE-ENTRY-HALL","DINING","KITCHEN","PANTRY","FAMILY-ROOM","POWDER","FLEX","GARAGE","NEXTGEN-ENTRY","NEXTGEN-LIVING","NEXTGEN-BED","NEXTGEN-BATH","NEXTGEN-LAUNDRY","NEXTGEN-CLOS"]);
+  const F2 = new Set(["LOFT","MAIN-HALL","PRIMARY","PRIMARY-BATH","PRIMARY-WIC-A","PRIMARY-WIC-B","BED-2","BATH-2","BED-2-WIC","BED-3","BATH-3","BED-3-WIC","LAUNDRY","LINEN"]);
+  const OUT = new Set(["CA-ROOM","PORCH","DECK"]);
+  const STAGE = {
+    "PRIMARY":["#1E8A4C","white"], "BED-2":["#C8102E","white"], "BED-3":["#E8720C","white"], "LOFT":["#6B4423","white"],
+    "LAUNDRY":["#F2C230","black"], "KITCHEN":["#1F5FBF","white"], "FLEX":["#6A2C91","white"], "DINING":["#0E8C8C","white"],
+    "FAMILY-ROOM":["#D6338F","white"], "NEXTGEN-LIVING":["#1A1A1A","white"], "NEXTGEN-BED":["#8A8F94","black"], "GARAGE":["hazard","white"]
+  };
+  const DEST_TO_STAGE = {"PRIMARY":"PRIMARY","PRIMARY-BATH":"PRIMARY","PRIMARY-WIC-A":"PRIMARY","PRIMARY-WIC-B":"PRIMARY","BED-2":"BED-2","BATH-2":"BED-2","BED-2-WIC":"BED-2","BED-3":"BED-3","BATH-3":"BED-3","BED-3-WIC":"BED-3","LOFT":"LOFT","MAIN-HALL":"LOFT","DECK":"LOFT","LAUNDRY":"LAUNDRY","LINEN":"LAUNDRY","KITCHEN":"KITCHEN","PANTRY":"KITCHEN","FLEX":"FLEX","DINING":"DINING","CA-ROOM":"DINING","FAMILY-ROOM":"FAMILY-ROOM","FOYER":"FAMILY-ROOM","POWDER":"FAMILY-ROOM","PORCH":"FAMILY-ROOM","NEXTGEN-LIVING":"NEXTGEN-LIVING","NEXTGEN-ENTRY":"NEXTGEN-LIVING","NEXTGEN-LAUNDRY":"NEXTGEN-LIVING","NEXTGEN-BED":"NEXTGEN-BED","NEXTGEN-BATH":"NEXTGEN-BED","NEXTGEN-CLOS":"NEXTGEN-BED","GARAGE":"GARAGE","GARAGE-ENTRY-HALL":"GARAGE"};
+  const DISPLAY = {"PRIMARY":"PRIMARY BEDROOM","PRIMARY-BATH":"PRIMARY BATH","PRIMARY-WIC-A":"PRIMARY WALK-IN CLOSET A","PRIMARY-WIC-B":"PRIMARY WALK-IN CLOSET B","BED-2":"BEDROOM 2","BATH-2":"BATHROOM 2","BED-2-WIC":"BEDROOM 2 WALK-IN CLOSET","BED-3":"BEDROOM 3","BATH-3":"BATHROOM 3","BED-3-WIC":"BEDROOM 3 WALK-IN CLOSET","FAMILY-ROOM":"FAMILY ROOM","CA-ROOM":"CALIFORNIA ROOM","MAIN-HALL":"MAIN HALL","GARAGE-ENTRY-HALL":"GARAGE ENTRY HALL","NEXTGEN-LIVING":"NEXTGEN LIVING","NEXTGEN-BED":"NEXTGEN BEDROOM","NEXTGEN-BATH":"NEXTGEN BATH","NEXTGEN-ENTRY":"NEXTGEN ENTRY","NEXTGEN-LAUNDRY":"NEXTGEN LAUNDRY","NEXTGEN-CLOS":"NEXTGEN CLOSET"};
+  const TX = {"TX-GARAGE":"Garage","TX-KITCHEN":"Kitchen","TX-PANTRY":"Pantry","TX-LAUNDRY":"Laundry","TX-SUNROOM":"Sunroom","TX-LIVING":"Living Room","TX-DINING":"Dining Room","TX-OFFICE":"Office","TX-UNDERSTAIRS":"Understairs Storage","TX-PRIMARY":"Primary Bedroom","TX-PRIMARY-BATH":"Primary Bath","TX-VANITY-ERIC":"Primary Bath Vanity (Eric)","TX-VANITY-LISA":"Primary Bath Vanity (Lisa)","TX-BATH-LINEN":"Primary Bath Linen","TX-BATH-WC":"Primary Bath WC","TX-WIC-LISA":"Primary WIC (Lisa)","TX-WIC-ERIC":"Primary WIC (Eric)","TX-LINEN-2":"2nd Floor Hall Linen","TX-GAMEROOM":"Game Room","TX-STORAGE":"Storage Room","TX-WRAP":"Wrap Room","TX-OPT-BED":"Optional Bedroom","TX-GUEST":"Guest Room"};
+  const CLASSWORD = {B:"Box", F:"Furniture", E:"Equip"};
+  const disp = t => DISPLAY[t] || (t || "").replace(/-/g, " ");
+  const floorOf = t => OUT.has(t) ? "Outdoor" : (F1.has(t) || (t||"").startsWith("NEXTGEN") || t === "GARAGE") ? "Floor 1" : F2.has(t) ? "Floor 2" : "";
+  const stageOf = r => (r.stage || "").trim().toUpperCase() || DEST_TO_STAGE[(r.dest||"").trim().toUpperCase()] || "GARAGE";
+
+  // ---- state (kept on this device only) ----
+  const store = { get(k){ try { return JSON.parse(localStorage.getItem(k)); } catch(e){ return null; } },
+                  set(k,v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch(e){} } };
+  let inventory = store.get("lot26.inventory") || null;   // {rows:[...], loaded:"iso", name:""}
+  let chklog    = store.get("lot26.chklog") || null;      // {rows:[...], loaded:"iso"}
+  let sightings = store.get("lot26.sightings") || [];     // rows this device logged
+  let byId = {};
+  const $ = id => document.getElementById(id);
+
+  function index() {
+    byId = {};
+    if (inventory) for (const r of inventory.rows) { const k = (r.id||"").trim().toUpperCase(); if (k) byId[k] = r; }
+    $("inv-status").textContent = inventory
+      ? `Inventory: ${inventory.rows.length} items from ${inventory.name} (loaded ${new Date(inventory.loaded).toLocaleString()})`
+        + (chklog ? ` · checkpoint log: ${chklog.rows.length} rows` : "")
+      : "No inventory loaded yet. Tap “Load inventory.csv” and pick the file from Drive.";
+  }
+  index(); renderLog();
+
+  // ---- loading CSVs ----
+  function loadCsv(file, cb) {
+    Papa.parse(file, { header: true, skipEmptyLines: true, complete: res => cb(res.data, file.name), error: e => setStatus("Could not read that file: " + e.message, "warn") });
+  }
+  function useInventory(rows, name) {
+    if (!rows.length || !("id" in rows[0])) { setStatus("No “id” column found — is this inventory.csv?", "warn"); return; }
+    inventory = { rows, loaded: new Date().toISOString(), name }; store.set("lot26.inventory", inventory); index(); setStatus(`Loaded ${rows.length} items.`, "ok");
+  }
+  function useLog(rows) { chklog = { rows, loaded: new Date().toISOString() }; store.set("lot26.chklog", chklog); index(); setStatus(`Loaded ${rows.length} checkpoint rows.`, "ok"); }
+  $("btn-paste").onclick = () => { const b = $("paste-box"); b.hidden = !b.hidden; if (!b.hidden) $("paste-text").focus(); };
+  $("btn-paste-inv").onclick = () => { const t = $("paste-text").value.trim(); if (!t) { setStatus("Paste the CSV text first.", "warn"); return; } useInventory(Papa.parse(t, { header: true, skipEmptyLines: true }).data, "pasted text"); };
+  $("btn-paste-log").onclick = () => { const t = $("paste-text").value.trim(); if (!t) { setStatus("Paste the CSV text first.", "warn"); return; } useLog(Papa.parse(t, { header: true, skipEmptyLines: true }).data); };
+  $("file-inv").onchange = e => { const f = e.target.files[0]; if (!f) return;
+    loadCsv(f, (rows, name) => useInventory(rows, name)); e.target.value = ""; };
+  $("file-log").onchange = e => { const f = e.target.files[0]; if (!f) return;
+    loadCsv(f, (rows) => useLog(rows)); e.target.value = ""; };
+
+  // ---- ID parsing: works for every QR format printed so far ----
+  function parseId(text) {
+    if (!text) return null;
+    let m = text.match(/\b(Box|Equip(?:ment)?|Furniture)\s*[:#]?\s*(\d{1,3})\b/i);
+    if (m) return ({box:"B",equip:"E",equipment:"E",furniture:"F"})[m[1].toLowerCase()] + m[2].padStart(3,"0");
+    m = text.trim().match(/^([BEF])[-\s]?(\d{1,3})$/i);
+    if (m) return m[1].toUpperCase() + m[2].padStart(3,"0");
+    m = text.trim().match(/^(\d{1,3})$/);
+    if (m) return "B" + m[1].padStart(3,"0");
+    return null;
+  }
+
+  // ---- result rendering ----
+  function show(id) {
+    const r = byId[id];
+    const out = $("result");
+    if (!inventory) { out.innerHTML = `<div class="empty">Load inventory.csv first, then scan or type a number.</div>`; return; }
+    if (!r) { out.innerHTML = `<div class="empty">${CLASSWORD[id[0]]||""} ${id.slice(1)} isn't in the inventory that's loaded. If it's a new box, reload a fresh inventory.csv from Drive.</div>`; return; }
+    const st = stageOf(r), [fill, ink] = STAGE[st] || ["#888","white"];
+    const dest = (r.dest||"").trim().toUpperCase();
+    const fields = [];
+    if (r.wave) fields.push(["Wave", r.wave.replace(/^W/i,"Wave ")]);
+    if (r.from_tx) fields.push(["From Texas", TX[r.from_tx.trim().toUpperCase()] || r.from_tx]);
+    if (r.set_id) fields.push(["Set", `${r.set_id} — part ${r.part_n||"?"} of ${r.part_total||"?"}`]);
+    if (r.packed_by || r.packed_date) fields.push(["Packed", [r.packed_by, r.packed_date].filter(Boolean).join(", ")]);
+    if (r.status) fields.push(["Status", r.status]);
+    if (r.photo) fields.push(["Photo", r.photo]);
+    const hand = [r.contents, r.notes].filter(x => x && x.trim()).join("\n");
+    const unp = [r.unprinted_contents, r.unprinted_notes, r.private_notes].filter(x => x && x.trim()).join("\n");
+    const sights = (chklog ? chklog.rows.filter(x => (x.id||"").trim().toUpperCase() === id) : []).concat(sightings.filter(x => x.id === id));
+    out.innerHTML = `
+      <div class="label">
+        <div class="block ${fill === "hazard" ? "hazard" : ""} ${ink === "black" ? "dark-ink" : ""}" ${fill !== "hazard" ? `style="background:${fill}"` : ""}>
+          <div class="top"><span>${floorOf(st)}</span><span>${CLASSWORD[id[0]]||id[0]} ${id.slice(1)}</span></div>
+          <div class="stage">${disp(st)}</div>
+        </div>
+        <div class="body">
+          <div class="final">Final location<b>${dest ? disp(dest) + (floorOf(dest) && floorOf(dest) !== floorOf(st) ? ` <span style="font-size:14px;color:#555">(${floorOf(dest)})</span>` : "") : "— write-in (not recorded yet)"}</b></div>
+          ${r.set_id ? `<div class="setband">Set of ${r.part_total||"?"} — do not separate — part ${r.part_n||"?"}</div>` : ""}
+          ${hand ? `<div class="hand">${esc(hand)}</div>` : ""}
+          ${unp ? `<div class="unprinted">${esc(unp)}</div>` : ""}
+          ${fields.length ? `<dl>${fields.map(([k,v]) => `<dt>${k}</dt><dd>${esc(v)}</dd>`).join("")}</dl>` : ""}
+          ${sights.length ? `<div class="sight">Seen: <ul>${sights.map(s => `<li>${esc(s.checkpoint)} — ${esc(s.timestamp||"")}${s.container ? " · " + esc(s.container) : ""}${s.location ? " · " + esc(s.location) : ""}</li>`).join("")}</ul></div>` : ""}
+          <div class="chips">
+            ${["PACKED","LOADED","RECEIVED","PLACED"].map(c => `<button class="quiet" data-cp="${c}" data-id="${id}">Log ${c.toLowerCase()}</button>`).join("")}
+          </div>
+        </div>
+      </div>`;
+    out.querySelectorAll("[data-cp]").forEach(b => b.onclick = () => logSighting(b.dataset.id, b.dataset.cp));
+    out.scrollIntoView({ block: "nearest" });
+  }
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+  // ---- sightings (kept on this device; copy into checkpoint_log.csv later) ----
+  function logSighting(id, cp) {
+    let container = "", location = "";
+    if (cp === "LOADED") container = (prompt("Container (e.g. POD1, TRUCK-W2):", sightings.length ? sightings[sightings.length-1].container || "" : "") || "").trim();
+    if (cp === "RECEIVED" || cp === "PLACED") location = (prompt("Where (stage area or room):", byId[id] ? stageOf(byId[id]) : "") || "").trim();
+    sightings.push({ id, checkpoint: cp, timestamp: new Date().toISOString(), container, location, who: "", photo: "", note: "" });
+    store.set("lot26.sightings", sightings); renderLog(); show(id); setStatus(`${CLASSWORD[id[0]]} ${id.slice(1)}: ${cp.toLowerCase()} logged.`, "ok");
+  }
+  function csvRows() {
+    const q = v => `"${String(v||"").replace(/"/g,'""')}"`;
+    return ["id,checkpoint,timestamp,container,location,who,photo,note"].concat(sightings.map(s => [s.id,s.checkpoint,s.timestamp,s.container,s.location,s.who,s.photo,s.note].map(q).join(","))).join("\n");
+  }
+  function renderLog() { $("log-view").textContent = sightings.length ? csvRows() : "(none yet)"; }
+  $("btn-copy").onclick = async () => { try { await navigator.clipboard.writeText(csvRows()); setStatus("Rows copied.", "ok"); } catch(e) { setStatus("Copy blocked — select the text in the box and copy it manually.", "warn"); } };
+  $("btn-share").onclick = async () => { if (navigator.share) { try { await navigator.share({ title: "Lot 26 sightings", text: csvRows() }); } catch(e) {} } else setStatus("Sharing isn't available here — use Copy rows.", "warn"); };
+  $("btn-clearlog").onclick = () => { if (confirm("Clear the rows logged on this device? Make sure they've been copied into checkpoint_log.csv first.")) { sightings = []; store.set("lot26.sightings", sightings); renderLog(); } };
+
+  // ---- manual lookup ----
+  $("btn-go").onclick = () => { const id = parseId($("manual").value); if (!id) { setStatus("Enter a number like 052, or F013 / E002.", "warn"); return; } show(id); };
+  $("manual").addEventListener("keydown", e => { if (e.key === "Enter") $("btn-go").onclick(); });
+
+  // ---- camera scanning ----
+  let stream = null, scanning = false, lastHit = "", lastAt = 0;
+  const video = $("video"), canvas = document.createElement("canvas"), ctx = canvas.getContext("2d", { willReadFrequently: true });
+  $("btn-scan").onclick = async () => { if (scanning) stopScan(); else startScan(); };
+  async function startScan() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { setStatus("The camera isn't available in this viewer. Open this page in Chrome or Safari, or type the number below.", "warn"); return; }
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 960 } }, audio: false });
+    } catch (e) {
+      setStatus("Camera not available here (" + (e.name || "blocked") + "). Open this page in Chrome or Safari, or type the number below.", "warn"); return;
+    }
+    video.srcObject = stream; await video.play();
+    $("scan").classList.add("on"); $("btn-scan").textContent = "Stop scanning"; scanning = true; setStatus("Point at a label. Hold steady on the QR.");
+    requestAnimationFrame(tick);
+  }
+  function stopScan() {
+    scanning = false; $("scan").classList.remove("on"); $("btn-scan").textContent = "Scan a label";
+    if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+  }
+  function tick() {
+    if (!scanning) return;
+    if (video.readyState === video.HAVE_ENOUGH_DATA) {
+      const w = video.videoWidth, h = video.videoHeight;
+      if (w && h) {
+        const s = Math.min(1, 800 / w); canvas.width = Math.round(w*s); canvas.height = Math.round(h*s);
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const code = jsQR(img.data, img.width, img.height, { inversionAttempts: "dontInvert" });
+        if (code && code.data) {
+          const id = parseId(code.data), now = Date.now();
+          if (id && (id !== lastHit || now - lastAt > 2500)) { lastHit = id; lastAt = now; if (navigator.vibrate) navigator.vibrate(40); show(id); setStatus(`Read ${CLASSWORD[id[0]]} ${id.slice(1)}. Still scanning — point at the next label or tap Stop.`, "ok"); }
+        }
+      }
+    }
+    setTimeout(() => requestAnimationFrame(tick), 120);
+  }
+  function setStatus(msg, kind) { const el = $("scan-status"); el.textContent = msg; el.className = "status " + (kind || ""); }
+  document.addEventListener("visibilitychange", () => { if (document.hidden && scanning) stopScan(); });
+})();
+</script>
+</body>
+</html>
