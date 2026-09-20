@@ -95,7 +95,8 @@
   #hit .verdict span { flex: 1 1 auto; } #hit .verdict button { flex: 0 0 auto; padding: 8px 12px; font-size: 15px; }
   #hit.ok .verdict { background: #e4f4ea; color: #12613a; } #hit.dup .verdict { background: #eee; color: #444; } #hit.warn .verdict { background: #fff3cf; color: #6b4e00; }
   .label .edit { margin-top: 14px; border-top: 1px solid #ddd; padding-top: 10px; }
-  .label .field { color: #555; } .label .field textarea, .label .field select { background: #fff; color: #111; border-color: #ccc; }
+  .label .field { color: #555; } .label .field textarea, .label .field select, .label .field input { background: #fff; color: #111; border-color: #ccc; }
+  .label details.labeltext { margin-top: 12px; border-top: 1px solid #ddd; padding-top: 4px; } .label details.labeltext > summary { font-size: 16px; font-weight: 600; color: #333; padding: 8px 0; }
   .label .elabel { font-size: 14px; color: #555; margin-top: 10px; }
   .label button.quiet { background: #f3f3f3; color: #111; border: 1px solid #d0d0d0; }
   .label button.quiet.on { background: #111; color: #fff; border-color: #111; }
@@ -110,28 +111,45 @@
   .counts { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; font-size: 16px; margin: 8px 0; } .counts b { text-align: right; font-variant-numeric: tabular-nums; }
   .note { font-size: 14px; color: var(--muted); margin: 6px 0 0; } .note.warn { color: var(--warn); }
   .camtools button { padding: 9px 10px; font-size: 15px; } .camtools button.on { background: var(--btn); color: var(--btn-ink); }
+  #hit.alert { border: 3px solid #b3142c; } #hit.alert .verdict { background: #fde3e6; color: #8f0c20; font-size: 17px; line-height: 1.3; align-items: flex-start; }
+  #alarm { position: fixed; inset: 0; z-index: 30; display: flex; align-items: center; justify-content: center; padding: 18px; background: rgba(120, 8, 24, .94); }
+  #alarm .alarm-box { width: 100%; max-width: 520px; background: #fff; color: #111; border-radius: 16px; padding: 20px; border: 4px solid #b3142c; text-align: center; font-size: 17px; line-height: 1.4; }
+  #alarm .alarm-id { font-size: clamp(34px, 11vw, 52px); font-weight: 800; line-height: 1; } #alarm .alarm-head { font-size: 22px; font-weight: 800; color: #8f0c20; margin-top: 8px; }
+  #alarm .alarm-when { font-size: 18px; color: #333; margin-top: 2px; } #alarm p { margin: 12px 0 0; } #alarm button { width: 100%; margin-top: 16px; background: #111; color: #fff; font-size: 19px; padding: 16px; }
   .sub.warn { color: var(--warn); }
 </style>
 </head>
 <body>
 <div id="practice" hidden>Practice mode — nothing you do here counts</div>
+<div id="alarm" hidden role="alertdialog" aria-modal="true">
+  <div class="alarm-box">
+    <div class="alarm-id" id="alarm-id"></div>
+    <div class="alarm-head" id="alarm-head"></div>
+    <div class="alarm-when" id="alarm-when"></div>
+    <p>Not counted. Scanning is paused.</p>
+    <p><b>Same box scanned twice?</b> Nothing to do.<br><b>A different box?</b> Set it aside — two boxes share this label. It needs a new number and new labels.</p>
+    <button id="alarm-ok">OK — carry on scanning</button>
+  </div>
+</div>
 <main>
   <div class="head">
     <h1>Lot 26 boxes</h1>
     <button id="pill" class="pill quiet" aria-live="polite">Starting…</button>
   </div>
   <p class="sub" id="inv-status">No inventory yet.</p>
+  <button id="ready-strip" class="quiet" hidden style="width:100%;margin:2px 0 6px"></button>
 
   <div id="runbar" hidden><div class="what" id="run-what"></div><button id="run-end">Finish</button></div>
 
   <div class="row" id="main-actions">
     <button id="btn-scan">Scan a label</button>
-    <button id="btn-run" class="quiet">Loading or unloading day</button>
+    <button id="btn-run" class="quiet">Scan many: seal · load · unload</button>
   </div>
 
   <div id="run-setup" class="panel" hidden>
     <p class="ptitle">What are you doing?</p>
     <div class="chips" id="run-types">
+      <button class="quiet" data-type="SEALED">Sealing</button>
       <button class="quiet" data-type="LOADED">Loading</button>
       <button class="quiet" data-type="RECEIVED">Unloading</button>
       <button class="quiet" data-type="PLACED">Putting in rooms</button>
@@ -164,7 +182,7 @@
 
   <details id="d-settings">
     <summary>Settings and sync</summary>
-    <label class="field">Your name (goes on everything this phone records)<input id="cfg-who" type="text" placeholder="Eric" autocomplete="off"></label>
+    <label class="field">Your name (goes on everything this phone records)<input id="cfg-who" type="text" placeholder="type your first name here" autocomplete="off"></label>
     <label class="field">Sync address<input id="cfg-url" type="url" placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off" autocapitalize="none" spellcheck="false"></label>
     <label class="field">Passphrase<input id="cfg-token" type="text" autocomplete="off" autocapitalize="none" spellcheck="false"></label>
     <label class="field">Photo size<select id="cfg-photo"><option value="2560">Standard — sharp, quick to upload</option><option value="0">Full size — slower on cellular</option></select></label>
@@ -220,7 +238,11 @@
   const stageOf = r => (r.stage || "").trim().toUpperCase() || DEST_TO_STAGE[(r.dest||"").trim().toUpperCase()] || "GARAGE";
 
   // ---- core: events -> state. No DOM in this block (it is unit-tested on its own). ----
-  const CHECKPOINTS = ["PACKED", "LOADED", "RECEIVED", "PLACED"];
+  // Packing states first, then moving states. PACKED is the older single "packed" mark; it is read as SEALED and no longer offered.
+  const PACK_STATES = ["STARTED", "READY", "SEALED"];
+  const MOVE_STATES = ["LOADED", "RECEIVED", "PLACED"];
+  const CHECKPOINTS = PACK_STATES.concat(["PACKED"], MOVE_STATES);
+  const isSealed = it => !!(it && it.last && (it.last.type === "SEALED" || it.last.type === "PACKED"));
   const CONTAINER_TYPES = ["DEPARTED", "DELIVERED"];            // about a whole pod or truck; they carry a container name and no item id
   const EV_COLS = ["event_id", "ts", "who", "id", "type", "field", "value", "container", "wave", "location", "photo", "note"];
   const W1_WORDS = { MUST: "Must go", OK: "Can go if there's room", NO: "Not in the pod" };
@@ -298,7 +320,7 @@
   // The three lists that matter on a loading or unloading day.
   function dayLists(state) {
     const all = Object.values(state.items).sort((a, b) => (a.id < b.id ? -1 : 1));
-    const counts = { total: all.filter(i => !i.unknown).length, PACKED: 0, LOADED: 0, RECEIVED: 0, PLACED: 0, none: 0, photos: 0, unknown: all.filter(i => i.unknown).length };
+    const counts = { total: all.filter(i => !i.unknown).length, STARTED: 0, READY: 0, SEALED: 0, PACKED: 0, LOADED: 0, RECEIVED: 0, PLACED: 0, none: 0, photos: 0, unknown: all.filter(i => i.unknown).length };
     for (const i of all) { counts[i.last ? i.last.type : "none"]++; if (i.photos.length) counts.photos++; }
     const transit = all.filter(i => i.loaded && !i.arrived);
     const byContainer = {};
@@ -307,26 +329,47 @@
       counts,
       onboard: transit.filter(i => i.phase === "ONBOARD"), onTheWay: transit.filter(i => i.phase === "TRANSIT"), delivered: transit.filter(i => i.phase === "DELIVERED"),
       containers: Object.values(state.containers || {}).filter(c => c.loaded || c.events.length).sort((a, b) => (a.name < b.name ? -1 : 1)),
+      packing: all.filter(i => i.last && i.last.type === "STARTED"), readyToSeal: all.filter(i => i.last && i.last.type === "READY"), sealed: all.filter(i => isSealed(i)),
       mustNotLoaded: all.filter(i => i.w1 === "MUST" && !i.loaded),
       canGo: all.filter(i => i.w1 === "OK" && !i.loaded),
       inTransit: transit, byContainer
     };
   }
 
+  // A label scanned again ALWAYS stops the session until a person acknowledges it. The scan cannot tell "same box twice" from
+  // "a second box wearing the same label" — with several helpers a true duplicate can turn up seconds later — so a person decides,
+  // helped by when and by whom the first scan was made. Nothing is counted; one SEEN row is kept as evidence.
+  function agoText(ts, now) {
+    const m = Math.max(0, Math.round(((now || Date.now()) - Date.parse(ts)) / 60000));
+    if (m < 1) return "just now"; if (m < 60) return m + " min ago";
+    const h = Math.floor(m / 60); return h < 48 ? h + " h" + (m % 60 ? " " + (m % 60) + " min" : "") + " ago" : Math.round(h / 24) + " days ago";
+  }
+  function repeatVerdict(prev, what, doing, now) {
+    return { log: false, seen: true, tone: "alert", head: what, when: `${agoText(prev.ts, now)}${prev.who ? " by " + prev.who : ""}`, note: `scanned again while ${doing}, ${agoText(prev.ts, now)} after ${prev.type}${prev.who ? " by " + prev.who : ""}`,
+      text: `${what} ${agoText(prev.ts, now)}${prev.who ? " by " + prev.who : ""}. Same box again? Carry on. A different box? Set it aside — two boxes share this label.` };
+  }
   // What should happen when a label is scanned during a run. Pure decision; the caller logs and announces it.
-  function runVerdict(item, run) {
+  function runVerdict(item, run, now) {
+    if (run.type === "SEALED") {
+      if (item && item.loaded) return repeatVerdict(item.loaded, `Already loaded${item.container ? " in " + item.container : ""}`, "sealing", now);
+      if (isSealed(item)) return repeatVerdict(item.last, "Already sealed", "sealing", now);
+      if (!item || !item.last || item.last.type !== "READY") return { log: true, tone: "warn", text: "Sealed — it was never marked ready to seal" };
+      if (!item.photos.length) return { log: true, tone: "warn", text: "Sealed — no photo of the contents on record" };
+      return { log: true, tone: "ok", text: "Sealed" };
+    }
     if (run.type === "LOADED") {
-      if (item && item.loaded && !item.arrived) return { log: false, tone: "dup", text: `Already loaded${item.container ? " in " + item.container : ""}` };
+      if (item && item.loaded && !item.arrived) return repeatVerdict(item.loaded, `Already loaded${item.container ? " in " + item.container : ""}`, "loading", now);
       if (item && item.w1 === "NO") return { log: true, tone: "warn", text: "Loaded — but this one was marked “Not in the pod”" };
+      if (item && item.id[0] === "B" && !isSealed(item)) return { log: true, tone: "warn", text: "Loaded — it was never marked sealed" };   // boxes only; furniture and equipment are not sealed
       return { log: true, tone: "ok", text: "Loaded" };
     }
     if (run.type === "RECEIVED") {
-      if (item && item.arrived) return { log: false, tone: "dup", text: "Already checked in" };
+      if (item && item.arrived) return repeatVerdict(item.history.filter(e => e.type === "RECEIVED" || e.type === "PLACED").pop(), "Already checked in", "unloading", now);
       if (!item || !item.loaded) return { log: true, tone: "warn", text: "Arrived — it was never scanned at loading" };
       return { log: true, tone: "ok", text: "Arrived" };
     }
     if (run.type === "PLACED") {
-      if (item && item.last && item.last.type === "PLACED") return { log: false, tone: "dup", text: "Already placed" };
+      if (item && item.last && item.last.type === "PLACED") return repeatVerdict(item.last, "Already placed", "placing", now);
       return { log: true, tone: "ok", text: "Placed" };
     }
     if (item && item.last && item.last.type === run.type) return { log: false, tone: "dup", text: "Already marked " + run.type.toLowerCase() };
@@ -348,7 +391,7 @@
     field: "", value: "", container: s.container || "", wave: "", location: s.location || "", photo: s.photo || "", note: s.note || "" });
 
   // ---- storage: small things in localStorage (shared with v1), events and photos in IndexedDB ----
-  const APP_VERSION = "Box app 2.2 (2026-09-20)";
+  const APP_VERSION = "Box app 2.6 (2026-09-20)";
   const $ = id => document.getElementById(id);
   const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const store = { get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } },
@@ -374,8 +417,10 @@
   let run = store.get("lot26.run") || null;                  // {type, container, wave, count}
   let currentId = null, dirty = false, photosWaiting = 0;
   const sync = { busy: false, again: false, lastOk: 0, lastTry: 0, lastPull: 0, error: "", code: "", server: store.get("lot26.server") || "" };
-  const noteServer = v => { if (v && v !== sync.server) { sync.server = v; store.set("lot26.server", v); } };
-  const serverTooOld = () => { const m = /dropbox (\d+)\.(\d+)/.exec(sync.server || ""); return !!m && (+m[1] < 1 || (+m[1] === 1 && +m[2] < 1)); };
+  const noteServer = v => { if (!v || v === sync.server) return; sync.server = v; store.set("lot26.server", v);
+    let again = 0; for (const e of local) if (e.rejected) { delete e.rejected; e.synced = false; again++; } if (again) persistLocal(); };   // the script changed: entries it refused before get one more try
+  const serverOlderThan = (maj, min) => { const m = /dropbox (\d+)\.(\d+)/.exec(sync.server || ""); return !!m && (+m[1] < maj || (+m[1] === maj && +m[2] < min)); };
+  const scriptNeedsUpdate = () => { setStatus("The Drive script needs its update first (it would refuse this entry). Deploy the new Code.gs, then try again.", "warn"); return true; };
   const thumbs = {};                                          // id -> [objectURL] for photos taken this session
   const ns = () => (cfg.practice ? "test" : "live");
 
@@ -383,7 +428,7 @@
   function recompute() {
     state = deriveState(inventory ? inventory.rows : [], mergeEvents(server, local));
     lists = dayLists(state);
-    renderHeader(); renderPill(); renderRun(); renderDayLists(); renderWhere(); renderJournal();
+    renderHeader(); renderPill(); renderRun(); renderDayLists(); renderWhere(); renderJournal(); renderReadyStrip();
   }
   function renderHeader() {
     $("practice").hidden = !cfg.practice;
@@ -416,12 +461,17 @@
   }
   const describe = i => { const r = i.row; return [disp(stageOf(r)), (r.contents || "").trim(), (r.unprinted_contents || "").trim().split("\n")[0]].filter(Boolean).join(" — "); };
   const idButtons = arr => `<div class="idlist">${arr.map(i => `<button class="quiet" data-open="${i.id}"><b>${CLASSWORD[i.id[0]] || ""} ${i.id.slice(1)}</b><span>${esc(describe(i))}</span></button>`).join("")}</div>`;
+  const readyButtons = arr => `<div class="idlist">${arr.map(i => `<button class="quiet" data-open="${i.id}"><b>${CLASSWORD[i.id[0]] || ""} ${i.id.slice(1)}</b><span>${esc([describe(i), "ready since " + whenText(i.last.ts) + (i.last.who ? " (" + i.last.who + ")" : ""), i.photos.length ? "" : "no photo yet"].filter(Boolean).join(" · "))}</span></button>`).join("")}</div>`;
+  function renderReadyStrip() { const n = lists.readyToSeal.length, b = $("ready-strip"); b.hidden = !n || !!(run && run.type === "SEALED"); b.textContent = `${n} box${n === 1 ? "" : "es"} ready to seal — show`; }
+  $("ready-strip").onclick = () => { $("d-where").open = true; const t = document.getElementById("ready-list") || $("d-where"); t.scrollIntoView({ block: "start", behavior: "smooth" }); };
   function wireOpen(root) { root.querySelectorAll("[data-open]").forEach(b => b.onclick = () => { show(b.dataset.open); $("result").scrollIntoView({ block: "start", behavior: "smooth" }); }); }
 
   function renderDayLists() {
     const el = $("daylists"); if (!run) { el.innerHTML = ""; return; }
     let h = "";
-    if (run.type === "LOADED") {
+    if (run.type === "SEALED") {
+      h += lists.readyToSeal.length ? `<div class="daylist"><h2>Ready to seal (${lists.readyToSeal.length})</h2>${readyButtons(lists.readyToSeal)}</div>` : `<div class="daylist done">Nothing is waiting to be sealed.</div>`;
+    } else if (run.type === "LOADED") {
       h += lists.mustNotLoaded.length ? `<div class="daylist"><h2>Must go — not loaded yet (${lists.mustNotLoaded.length})</h2>${idButtons(lists.mustNotLoaded)}</div>`
         : `<div class="daylist done">Every “Must go” item is loaded.</div>`;
       if (lists.canGo.length) h += `<div class="daylist"><h2>Can go if there's room (${lists.canGo.length})</h2>${idButtons(lists.canGo)}</div>`;
@@ -436,8 +486,10 @@
     const c = lists.counts, el = $("where");
     el.innerHTML = `<div class="counts">
         <span>Items in the inventory</span><b>${c.total}</b>
-        <span>Not packed or scanned yet</span><b>${c.none}</b>
-        <span>Packed</span><b>${c.PACKED}</b>
+        <span>Not started</span><b>${c.none}</b>
+        <span>Packing in progress</span><b>${lists.packing.length}</b>
+        <span>Full — ready to seal</span><b>${lists.readyToSeal.length}</b>
+        <span>Sealed, waiting for moving day</span><b>${lists.sealed.length}</b>
         <span>Loaded, container not picked up yet</span><b>${lists.onboard.length}</b>
         <span>On the way</span><b>${lists.onTheWay.length}</b>
         <span>Delivered, not unloaded yet</span><b>${lists.delivered.length}</b>
@@ -445,6 +497,8 @@
         <span>With at least one photo</span><b>${c.photos}</b>
         ${c.unknown ? `<span>Scanned, but not in the inventory</span><b>${c.unknown}</b>` : ""}
       </div>
+      ${lists.readyToSeal.length ? `<div class="daylist" id="ready-list"><h2>Ready to seal (${lists.readyToSeal.length})</h2>${readyButtons(lists.readyToSeal)}</div>` : ""}
+      ${lists.packing.length ? `<div class="daylist"><h2>Packing in progress (${lists.packing.length})</h2>${idButtons(lists.packing)}</div>` : ""}
       ${lists.containers.length ? `<div class="daylist"><h2>Pods and trucks</h2>${lists.containers.map(containerCard).join("")}</div>` : ""}
       ${lists.mustNotLoaded.length ? `<div class="daylist"><h2>Must go — not loaded yet (${lists.mustNotLoaded.length})</h2>${idButtons(lists.mustNotLoaded)}</div>` : ""}
       ${lists.inTransit.length ? `<div class="daylist"><h2>Loaded, not checked in (${lists.inTransit.length})</h2>${idButtons(lists.inTransit)}</div>` : ""}
@@ -464,7 +518,7 @@
   }
   async function markContainer(name, type) {
     const c = state.containers[name]; if (!c) return;
-    if (serverTooOld()) { setStatus("The Drive script needs its update first (it would refuse this entry). Deploy the new Code.gs, then try again.", "warn"); return; }
+    if (serverOlderThan(1, 1) && scriptNeedsUpdate()) return;
     const n = c.loaded - c.checkedIn;
     if (!confirm(type === "DEPARTED" ? `Mark ${name} as picked up and on its way?\n\n${n} item${n === 1 ? " is" : "s are"} loaded in it.` : `Mark ${name} as delivered?\n\n${n} item${n === 1 ? "" : "s"} still to unload and check in.`)) return;
     await record(mkEvent(cfg.who, "", type, { container: name, wave: c.wave || "" })); setStatus(`${name}: ${containerWords[type]}.`, "ok");
@@ -476,7 +530,11 @@
 
   // ---- recording ----
   async function persistLocal() { try { await idb.set(ns() + ":local", local); } catch (e) { setStatus("This phone's storage refused the entry. Free some space, then try again.", "warn"); } }
-  async function record(ev) { ev.synced = false; local.push(ev); recompute(); await persistLocal(); syncSoon(1200); return ev; }
+  async function record(ev) {
+    const it = ev.id && state.items[ev.id], first = ev.id && (!it || !it.last) && (ev.type === "PHOTO" || (ev.type === "EDIT" && /^unprinted_/.test(ev.field) && ev.value));
+    if (first && !serverOlderThan(1, 2)) { const st = mkEvent(ev.who, ev.id, "STARTED", { note: "auto: first photo or description", ts: new Date(Date.parse(ev.ts) - 1).toISOString() }); st.synced = false; local.push(st); }
+    ev.synced = false; local.push(ev); recompute(); await persistLocal(); syncSoon(1200); return ev;
+  }
   const lastCheckpointOf = id => { const it = state.items[id]; return it && it.last; };
 
   // ---- sync ----
@@ -551,6 +609,7 @@
     cfg = { who: $("cfg-who").value.trim(), url: $("cfg-url").value.trim(), token: $("cfg-token").value.trim(), photoMax: parseInt($("cfg-photo").value, 10) || 0, practice: $("cfg-practice").checked };
     store.set("lot26.cfg", cfg);
     sync.lastPull = 0;
+    if (!cfg.who) { setStatus("Type your first name in the first box — it goes on every record and photo this phone makes. Then tap “Save and test” again.", "warn"); $("cfg-who").focus(); recompute(); return; }
     if (was !== ns()) { currentId = null; $("result").innerHTML = ""; endRun(); await loadNamespace(); }
     recompute();
     if (!cfg.url || !cfg.token) { setStatus("Saved. Add the sync address and passphrase to turn on sync.", "ok"); return; }
@@ -592,7 +651,7 @@
         <div class="top"><span>${floorOf(st)}</span><span>${CLASSWORD[id[0]] || id[0]} ${id.slice(1)}</span></div><div class="stage">${disp(st)}</div></div>`;
   }
   const whenText = ts => { const d = new Date(ts); return isNaN(d) ? ts : d.toLocaleString([], { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }); };
-  const cpWords = { PACKED: "Packed", LOADED: "Loaded", RECEIVED: "Arrived", PLACED: "Placed in room", SEEN: "Seen" };
+  const cpWords = { STARTED: "Packing started", READY: "Full — ready to seal", SEALED: "Sealed, 5 labels on", PACKED: "Packed (older entry)", LOADED: "Loaded", RECEIVED: "Arrived", PLACED: "Placed in room", SEEN: "Seen" };
   const phaseWords = { ONBOARD: "loaded, not picked up yet", TRANSIT: "on the way", DELIVERED: "delivered, not unloaded yet" };
 
   function show(id, keep) {
@@ -608,7 +667,9 @@
     if (r.set_id) fields.push(["Set", `${r.set_id} — part ${r.part_n || "?"} of ${r.part_total || "?"}`]);
     if (r.packed_by || r.packed_date) fields.push(["Packed", [r.packed_by, r.packed_date].filter(Boolean).join(", ")]);
     const hand = [r.contents, r.notes].filter(x => x && x.trim()).join("\n");
-    const uc = keep ? keep.uc : (r.unprinted_contents || ""), un = keep ? keep.un : ([r.unprinted_notes, r.private_notes].filter(x => x && x.trim()).join("\n"));
+    const had = (k, v) => (keep && keep[k] != null ? keep[k] : v);
+    const uc = had("uc", r.unprinted_contents || ""), un = had("un", [r.unprinted_notes, r.private_notes].filter(x => x && x.trim()).join("\n"));
+    const lc = had("lc", r.contents || ""), ln = had("ln", r.notes || ""), labelChanged = !!(it && (it.edits.contents !== undefined || it.edits.notes !== undefined));
     const hist = it ? it.history : [], nPhotos = it ? it.photos.length : 0, w1 = it ? it.w1 : "";
     out.innerHTML = `
       <div class="label">
@@ -618,6 +679,7 @@
           <div class="final">Final location<b>${dest ? disp(dest) + (floorOf(dest) && floorOf(dest) !== floorOf(st) ? ` <span style="font-size:14px;color:#555">(${floorOf(dest)})</span>` : "") : "— written on the label by hand; not recorded yet"}</b></div>
           ${r.set_id ? `<div class="setband">Set of ${r.part_total || "?"} — do not separate — part ${r.part_n || "?"}</div>` : ""}
           ${hand ? `<div class="hand">${esc(hand)}</div>` : ""}
+          ${labelChanged ? `<p class="note" style="color:#555">Label text was changed after the first label was printed — the remaining labels will carry it.</p>` : ""}
           ${fields.length ? `<dl>${fields.map(([k, v]) => `<dt>${k}</dt><dd>${esc(v)}</dd>`).join("")}</dl>` : ""}
           <div class="edit">
             <div class="elabel">Going in the pod?</div>
@@ -628,21 +690,37 @@
             <div class="row" style="margin-top:10px"><button class="save" id="ed-save">Save details</button><button class="quiet" id="ed-photo">Take a photo</button></div>
             <div class="thumbs">${(thumbs[id] || []).map(u => `<img src="${u}" alt="">`).join("")}</div>
             <div class="pcount">${nPhotos ? `${nPhotos} photo${nPhotos === 1 ? "" : "s"} recorded for this one` : "No photos yet"}</div>
+            <details class="labeltext" ${keep && keep.open ? "open" : ""}><summary>Change what's printed on the remaining labels</summary>
+              <p class="note" style="color:#8a4b00">Anyone who can see the box can read this, and it goes into the QR. Leave valuables out — those belong in “What's inside”, above.</p>
+              <label class="field">Contents to print<input id="ed-lc" type="text" maxlength="90" autocomplete="off" value="${esc(lc)}"></label>
+              <label class="field">Note to print<input id="ed-ln" type="text" maxlength="60" autocomplete="off" value="${esc(ln)}"></label>
+              <p class="note" style="color:#555">The label already on the box stays as it is. Staging and final location never change.</p>
+              <div class="row" style="margin-top:8px"><button class="quiet" id="ed-lsave">Save label text</button></div>
+            </details>
           </div>
           ${hist.length ? `<div class="sight">So far: <ul>${hist.map(s => `<li>${cpWords[s.type] || s.type} — ${esc(whenText(s.ts))}${s.container ? " · " + esc(s.container) : ""}${s.location ? " · " + esc(disp(s.location)) : ""}${s.who ? " · " + esc(s.who) : ""}</li>`).join("")}</ul></div>` : ""}
-          <div class="chips">${CHECKPOINTS.map(c => `<button class="quiet" data-cp="${c}">${cpWords[c]}</button>`).join("")}</div>
+          <div class="elabel">Packing</div>
+          <div class="chips">${PACK_STATES.map(c => `<button class="quiet ${it && it.last && (it.last.type === c || (c === "SEALED" && it.last.type === "PACKED")) ? "on" : ""}" data-cp="${c}">${cpWords[c]}</button>`).join("")}</div>
+          <div class="elabel">Moving</div>
+          <div class="chips">${MOVE_STATES.map(c => `<button class="quiet ${it && it.last && it.last.type === c ? "on" : ""}" data-cp="${c}">${cpWords[c]}</button>`).join("")}</div>
           ${it && it.last ? `<div class="chips"><button class="quiet" id="ed-undo">Undo “${cpWords[it.last.type]}” — it was a mistake</button></div>` : ""}
         </div>
       </div>`;
-    const keepNow = () => ({ uc: $("ed-uc").value, un: $("ed-un").value });
-    ["ed-uc", "ed-un"].forEach(k => $(k).oninput = () => { dirty = true; });
+    const keepNow = keepFields;
+    ["ed-uc", "ed-un", "ed-lc", "ed-ln"].forEach(k => $(k).oninput = () => { dirty = true; });
+    $("ed-lsave").onclick = async () => {
+      const k = keepFields(); let n = 0;
+      if (k.lc.trim() !== (r.contents || "").trim()) { await record(mkEvent(cfg.who, id, "EDIT", { field: "contents", value: k.lc.trim() })); n++; }
+      if (k.ln.trim() !== (r.notes || "").trim()) { await record(mkEvent(cfg.who, id, "EDIT", { field: "notes", value: k.ln.trim() })); n++; }
+      show(id, { uc: k.uc, un: k.un, open: true }); setStatus(n ? "Label text saved. It prints on this box's remaining labels." : "Nothing had changed.", "ok");
+    };
     out.querySelectorAll("[data-w1]").forEach(b => b.onclick = async () => { const k = keepNow(), d = dirty; await record(mkEvent(cfg.who, id, "EDIT", { field: "w1", value: w1 === b.dataset.w1 ? "" : b.dataset.w1 })); show(id, d ? k : null); });
     if ($("ed-dest")) $("ed-dest").onchange = async e => { const k = keepNow(), d = dirty; await record(mkEvent(cfg.who, id, "EDIT", { field: "dest", value: e.target.value })); show(id, d ? k : null); setStatus("Final location recorded.", "ok"); };
     $("ed-save").onclick = async () => {
       const k = keepNow(); let n = 0;
       if (k.uc.trim() !== (r.unprinted_contents || "").trim()) { await record(mkEvent(cfg.who, id, "EDIT", { field: "unprinted_contents", value: k.uc.trim() })); n++; }
       if (k.un.trim() !== [r.unprinted_notes, r.private_notes].filter(x => x && x.trim()).join("\n").trim()) { await record(mkEvent(cfg.who, id, "EDIT", { field: "unprinted_notes", value: k.un.trim() })); n++; }
-      show(id); setStatus(n ? "Details saved." : "Nothing had changed.", "ok");
+      show(id, k.open ? { lc: k.lc, ln: k.ln, open: true } : null); setStatus(n ? "Details saved." : "Nothing had changed.", "ok");
     };
     $("ed-photo").onclick = () => { photoFor = id; $("cam").click(); };
     out.querySelectorAll("[data-cp]").forEach(b => b.onclick = () => logCheckpoint(id, b.dataset.cp, keepNow()));
@@ -650,8 +728,15 @@
       const k = keepNow(), d = dirty; await record(mkEvent(cfg.who, id, "UNDO", { value: last.event_id })); show(id, d ? k : null); setStatus("Undone.", "ok"); };
   }
 
+  const missingBeforeSeal = it => [(!it || !it.photos.length) ? "no photo of the contents" : "", (!it || !(it.row.unprinted_contents || it.row.contents || "").trim()) ? "no description of what's inside" : ""].filter(Boolean);
+  function keepFields() { if (!$("ed-uc")) return null; const lt = document.querySelector("#result .labeltext");
+    return { uc: $("ed-uc").value, un: $("ed-un").value, lc: $("ed-lc").value, ln: $("ed-ln").value, open: !!(lt && lt.open) }; }
   async function logCheckpoint(id, cp, keep) {
-    const it = state.items[id], extra = {};
+    const it = state.items[id], extra = {}, name = `${CLASSWORD[id[0]]} ${id.slice(1)}`;
+    if (it && it.last && (it.last.type === cp || (cp === "SEALED" && it.last.type === "PACKED"))) { setStatus(`${name} was already marked “${cpWords[cp]}” ${agoText(it.last.ts)}${it.last.who ? " by " + it.last.who : ""}. Nothing added.`, "ok"); return; }
+    if (PACK_STATES.includes(cp) && serverOlderThan(1, 2) && scriptNeedsUpdate()) return;
+    if (cp === "READY" || cp === "SEALED") { const miss = missingBeforeSeal(it);
+      if (miss.length && !confirm(`${name}: ${miss.join(" and ")} yet.\n\n${cp === "SEALED" ? "Once it is taped, adding them means opening it again. Mark it sealed anyway?" : "Mark it ready to seal anyway?"}`)) return; }
     if (cp === "LOADED") { const c = prompt("Which container? (POD1, TRUCK …)", (run && run.container) || lastContainer() || "POD1"); if (c === null) return; extra.container = c.trim().toUpperCase(); extra.wave = (run && run.wave) || ""; }
     if (cp === "RECEIVED") extra.location = it ? stageOf(it.row) : "";
     if (cp === "PLACED") extra.location = it ? ((it.row.dest || "").trim().toUpperCase() || stageOf(it.row)) : "";
@@ -680,20 +765,21 @@
       const ev = mkEvent(cfg.who, id, "PHOTO", { photo: name, ts: when.toISOString() });
       await idb.putPhoto({ key: ev.event_id, ns: ns(), name, blob, event: wire(ev) });
       photosWaiting++; (thumbs[id] = thumbs[id] || []).push(URL.createObjectURL(blob));
-      const k = $("ed-uc") ? { uc: $("ed-uc").value, un: $("ed-un").value } : null, d = dirty;
+      const k = keepFields(), d = dirty;
       await record(ev); if (currentId === id) show(id, d ? k : null);
       setStatus(`Photo kept as ${name}${cfg.url ? " — uploading" : ""}.`, "ok");
     } catch (er) { setStatus("The photo could not be kept on this phone (storage problem). It was not recorded — take it again after freeing space.", "warn"); }
   };
 
   // ---- a loading / unloading run ----
-  const runWords = { LOADED: "Loading", RECEIVED: "Unloading", PLACED: "Putting in rooms" };
+  const runWords = { SEALED: "Sealing", LOADED: "Loading", RECEIVED: "Unloading", PLACED: "Putting in rooms" };
   let pickedType = null;
   $("btn-run").onclick = () => { const p = $("run-setup"); p.hidden = !p.hidden; if (!p.hidden) { $("run-container").value = lastContainer() || ""; $("containers").innerHTML = Array.from(new Set(mergeEvents(server, local).map(e => e.container).filter(Boolean))).map(c => `<option value="${esc(c)}">`).join(""); } };
   $("run-types").querySelectorAll("button").forEach(b => b.onclick = () => { pickedType = b.dataset.type; $("run-types").querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b)); $("run-load-fields").hidden = pickedType !== "LOADED"; $("run-start").disabled = false; });
   $("run-cancel").onclick = () => { $("run-setup").hidden = true; };
   $("run-start").onclick = () => {
     if (!pickedType) return;
+    if (pickedType === "SEALED" && serverOlderThan(1, 2) && scriptNeedsUpdate()) return;
     const container = $("run-container").value.trim().toUpperCase();
     if (pickedType === "LOADED" && !container) { setStatus("Name the container first — POD1, TRUCK …", "warn"); $("run-container").focus(); return; }
     run = { type: pickedType, container: pickedType === "LOADED" ? container : "", wave: pickedType === "LOADED" ? $("run-wave").value : "", count: 0 };
@@ -706,20 +792,30 @@
     $("runbar").hidden = !run; $("btn-run").hidden = !!run; if (!run) return;
     $("run-what").innerHTML = `${runWords[run.type]}${run.container ? " → " + esc(run.container) : ""}${run.wave ? " · " + run.wave.replace(/^W/, "Wave ") : ""}<small>${run.count} recorded this session${scanning ? "" : " — tap “Scan a label” to continue"}</small>`;
   }
-  let lastRunHit = "", lastRunAt = 0;
-  async function handleRunScan(id) {
-    const now = Date.now(); if (id === lastRunHit && now - lastRunAt < 8000) return; lastRunHit = id; lastRunAt = now;
+  let lastRunHit = "", lastRunAt = 0, blocked = false, alarmTimer = null;
+  function raiseAlarm(id, v) {
+    blocked = true; $("alarm-id").textContent = `${CLASSWORD[id[0]] || id[0]} ${id.slice(1)}`; $("alarm-head").textContent = v.head || v.text; $("alarm-when").textContent = v.when || "";
+    $("alarm").hidden = false; $("alarm-ok").focus();
+    let n = 0; const sound = () => { [0, 240, 480].forEach((d, i) => setTimeout(() => beep(i % 2 ? "dup" : "warn"), d)); if (navigator.vibrate) navigator.vibrate([300, 100, 300, 100, 300]); if (++n >= 8) clearInterval(alarmTimer); };
+    sound(); clearInterval(alarmTimer); alarmTimer = setInterval(sound, 2500);                     // keeps sounding until someone answers it
+  }
+  $("alarm-ok").onclick = () => { clearInterval(alarmTimer); if (navigator.vibrate) navigator.vibrate(0); $("alarm").hidden = true; blocked = false; lastRunAt = Date.now(); };
+  async function handleRunScan(id, typed) {
+    if (blocked) return;
+    const now = Date.now(); if (!typed && id === lastRunHit && now - lastRunAt < 4000) { lastRunAt = now; return; } lastRunHit = id; lastRunAt = now;
     const it = state.items[id], v = runVerdict(it, run); let ev = null;
     if (v.log) {
-      const extra = run.type === "LOADED" ? { container: run.container, wave: run.wave } : { location: it ? (run.type === "PLACED" ? ((it.row.dest || "").trim().toUpperCase() || stageOf(it.row)) : stageOf(it.row)) : "" };
+      const extra = run.type === "SEALED" ? {} : run.type === "LOADED" ? { container: run.container, wave: run.wave } : { location: it ? (run.type === "PLACED" ? ((it.row.dest || "").trim().toUpperCase() || stageOf(it.row)) : stageOf(it.row)) : "" };
       run.count++; store.set("lot26.run", run); ev = await record(mkEvent(cfg.who, id, run.type, extra));
     }
+    if (v.seen) await record(mkEvent(cfg.who, id, "SEEN", { container: run.container || "", note: v.note || "" }));
     const unknown = !it || it.unknown, tone = unknown && v.tone === "ok" ? "warn" : v.tone;
     const h = $("hit"); h.hidden = false; h.className = tone;
     h.innerHTML = `${labelBlock(id, it && !it.unknown ? stageOf(it.row) : null)}<div class="verdict"><span>${esc(v.text)}${unknown ? " — not in the inventory on this phone" : ""}</span>${ev ? `<button class="quiet" id="hit-undo">Undo</button>` : ""}<button class="quiet" id="hit-open">Open</button></div>`;
     if (ev) $("hit-undo").onclick = async () => { await record(mkEvent(cfg.who, id, "UNDO", { value: ev.event_id })); run.count = Math.max(0, run.count - 1); store.set("lot26.run", run); renderRun(); h.className = "dup"; h.querySelector(".verdict span").textContent = "Undone — not recorded"; $("hit-undo").remove(); lastRunHit = ""; };
     $("hit-open").onclick = () => { show(id); $("result").scrollIntoView({ block: "start", behavior: "smooth" }); };
-    beep(tone); if (navigator.vibrate) navigator.vibrate(tone === "ok" ? 60 : tone === "dup" ? [40, 60, 40] : [120, 60, 120]);
+    if (tone === "alert") raiseAlarm(id, v);
+    else { beep(tone); if (navigator.vibrate) navigator.vibrate(tone === "ok" ? 60 : tone === "dup" ? [40, 60, 40] : [120, 60, 120]); }
   }
   let audio = null;
   function beepInit() { try { audio = audio || new (window.AudioContext || window.webkitAudioContext)(); if (audio.state === "suspended") audio.resume(); } catch (e) {} }
@@ -727,7 +823,7 @@
     o.frequency.value = tone === "ok" ? 1040 : tone === "dup" ? 420 : 640; g.gain.value = 0.18; const t = audio.currentTime, len = tone === "ok" ? 0.09 : 0.28; o.start(t); g.gain.setValueAtTime(0.18, t + len - 0.03); g.gain.linearRampToValueAtTime(0, t + len); o.stop(t + len); } catch (e) {} }
 
   // ---- manual entry ----
-  function lookup(text) { const id = parseId(text); if (!id) { setStatus("Enter a number like 052, or F013 / E002.", "warn"); return; } $("manual").value = ""; if (run) handleRunScan(id); else show(id); }
+  function lookup(text) { const id = parseId(text); if (!id) { setStatus("Enter a number like 052, or F013 / E002.", "warn"); return; } $("manual").value = ""; if (run) { if (blocked) return; handleRunScan(id, true); } else show(id); }
   $("btn-go").onclick = () => lookup($("manual").value);
   $("manual").addEventListener("keydown", e => { if (e.key === "Enter") lookup($("manual").value); });
 
@@ -802,7 +898,7 @@
   async function tick() {
     if (!scanning) return;
     try {
-      if (video.readyState >= 2 && video.videoWidth) {
+      if (!blocked && video.readyState >= 2 && video.videoWidth) {
         frames++;
         const id = parseId(await readFrame()), now = Date.now();
         if (id && run) await handleRunScan(id);
