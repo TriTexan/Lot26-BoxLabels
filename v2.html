@@ -109,6 +109,7 @@
   .idlist button b { flex: 0 0 auto; font-variant-numeric: tabular-nums; } .idlist button span { color: var(--muted); font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .counts { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; font-size: 16px; margin: 8px 0; } .counts b { text-align: right; font-variant-numeric: tabular-nums; }
   .note { font-size: 14px; color: var(--muted); margin: 6px 0 0; } .note.warn { color: var(--warn); }
+  .camtools button { padding: 9px 10px; font-size: 15px; } .camtools button.on { background: var(--btn); color: var(--btn-ink); }
   .sub.warn { color: var(--warn); }
 </style>
 </head>
@@ -145,6 +146,8 @@
   </div>
 
   <div class="scan" id="scan"><video id="video" playsinline muted></video><div class="frame"></div></div>
+  <div class="row camtools" id="camtools" hidden><button id="cam-zoom" class="quiet" hidden>Zoom</button><button id="cam-light" class="quiet" hidden>Light</button><button id="cam-switch" class="quiet" hidden>Switch camera</button></div>
+  <p class="note" id="scan-diag" hidden></p>
   <div id="hit" hidden></div>
   <p class="status" id="scan-status"></p>
 
@@ -333,7 +336,7 @@
     field: "", value: "", container: s.container || "", wave: "", location: s.location || "", photo: s.photo || "", note: s.note || "" });
 
   // ---- storage: small things in localStorage (shared with v1), events and photos in IndexedDB ----
-  const APP_VERSION = "Box app 2.0 (2026-09-20)";
+  const APP_VERSION = "Box app 2.1 (2026-09-20)";
   const $ = id => document.getElementById(id);
   const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const store = { get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } },
@@ -686,42 +689,85 @@
   $("manual").addEventListener("keydown", e => { if (e.key === "Enter") lookup($("manual").value); });
 
   // ---- camera scanning ----
-  let stream = null, scanning = false, lastHit = "", lastAt = 0, wake = null;
+  // Reader: the phone's built-in barcode reader when the browser offers one (far better on small or slightly soft codes), jsQR otherwise.
+  // Camera: 1080p, continuous focus, and 2x zoom when the lens allows — so the label can be read from about a foot away, where phone cameras can still focus.
+  let stream = null, track = null, caps = {}, scanning = false, lastHit = "", lastAt = 0, wake = null, detector = null, detectorTried = false, detErr = 0, frames = 0, scanErr = "", cams = [];
+  const camPref = Object.assign({ deviceId: "", zoom: 2 }, store.get("lot26.cam") || {});
   const video = $("video"), canvas = document.createElement("canvas"), ctx = canvas.getContext("2d", { willReadFrequently: true });
   $("btn-scan").onclick = () => { if (scanning) stopScan(); else { beepInit(); startScan(); } };
   function setStatus(msg, kind) { const el = $("scan-status"); el.textContent = msg; el.className = "status " + (kind || ""); }
+  async function getDetector() {
+    if (detectorTried) return detector; detectorTried = true;
+    try { if ("BarcodeDetector" in window) { const f = await BarcodeDetector.getSupportedFormats(); if (f.includes("qr_code")) detector = new BarcodeDetector({ formats: ["qr_code"] }); } } catch (e) { detector = null; }
+    return detector;
+  }
+  async function openCamera() {
+    const size = { width: { ideal: 1920 }, height: { ideal: 1080 } }, any = Object.assign({ facingMode: { ideal: "environment" } }, size);
+    if (camPref.deviceId) { try { return await navigator.mediaDevices.getUserMedia({ video: Object.assign({ deviceId: { exact: camPref.deviceId } }, size), audio: false }); } catch (e) { camPref.deviceId = ""; store.set("lot26.cam", camPref); } }
+    return await navigator.mediaDevices.getUserMedia({ video: any, audio: false });
+  }
+  async function tune(set) { try { await track.applyConstraints({ advanced: [set] }); return true; } catch (e) { return false; } }
+  const zoomSteps = () => caps.zoom ? Array.from(new Set([1, 2, 3].map(z => Math.min(caps.zoom.max, Math.max(caps.zoom.min, z))))) : [];
   async function startScan() {
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { setStatus("The camera isn't available in this viewer. Open this page in Chrome, or type the number below.", "warn"); return; }
-    try { stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 960 } }, audio: false }); }
+    try { stream = await openCamera(); }
     catch (e) { setStatus("Camera not available here (" + (e.name || "blocked") + "). Open this page in Chrome, or type the number below.", "warn"); return; }
+    track = stream.getVideoTracks()[0]; caps = (track.getCapabilities && track.getCapabilities()) || {};
     video.srcObject = stream; await video.play();
-    $("scan").classList.add("on"); $("btn-scan").textContent = "Stop scanning"; scanning = true; renderRun();
-    setStatus(run ? "Point at each label in turn. Listen for the beep." : "Point at a label. Hold steady on the QR.");
-    try { if (navigator.wakeLock) wake = await navigator.wakeLock.request("screen"); } catch (e) {}
+    await getDetector();
+    if (!detector && typeof jsQR !== "function") { setStatus("The label reader did not load. Check the connection, reload the page, then try again.", "warn"); }
+    if (caps.focusMode && caps.focusMode.includes("continuous")) await tune({ focusMode: "continuous" });
+    if (caps.zoom) { const steps = zoomSteps(); camPref.zoom = steps.includes(camPref.zoom) ? camPref.zoom : steps[Math.min(1, steps.length - 1)]; await tune({ zoom: camPref.zoom }); }
+    try { const all = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === "videoinput"), back = all.filter(d => /back|rear|environment/i.test(d.label)); cams = back.length ? back : all; } catch (e) { cams = []; }
+    $("scan").classList.add("on"); $("btn-scan").textContent = "Stop scanning"; scanning = true; frames = 0; scanErr = ""; renderRun(); renderCamTools();
+    if (detector || typeof jsQR === "function") setStatus(run ? "Hold the phone about a foot from each label in turn. Listen for the beep." : "Hold the phone about a foot from the label, QR inside the box.");
+    if (navigator.wakeLock) navigator.wakeLock.request("screen").then(w => { wake = w; }).catch(() => {});
     requestAnimationFrame(tick);
   }
   function stopScan() {
-    scanning = false; $("scan").classList.remove("on"); $("btn-scan").textContent = "Scan a label";
-    if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+    scanning = false; $("scan").classList.remove("on"); $("btn-scan").textContent = "Scan a label"; $("camtools").hidden = true; $("scan-diag").hidden = true;
+    if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; track = null; }
     if (wake) { try { wake.release(); } catch (e) {} wake = null; } renderRun();
   }
-  function tick() {
-    if (!scanning) return;
-    if (video.readyState === video.HAVE_ENOUGH_DATA) {
-      const w = video.videoWidth, h = video.videoHeight;
-      if (w && h) {
-        const s = Math.min(1, 800 / w); canvas.width = Math.round(w * s); canvas.height = Math.round(h * s);
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const code = jsQR(img.data, img.width, img.height, { inversionAttempts: "dontInvert" });
-        if (code && code.data) {
-          const id = parseId(code.data), now = Date.now();
-          if (id && run) handleRunScan(id);
-          else if (id && (id !== lastHit || now - lastAt > 2500)) { lastHit = id; lastAt = now; if (navigator.vibrate) navigator.vibrate(40); show(id); setStatus(`Read ${CLASSWORD[id[0]]} ${id.slice(1)}. Still scanning — point at the next label or tap Stop.`, "ok"); }
-        }
-      }
+  function renderCamTools() {
+    const cur = track && track.getSettings ? track.getSettings() : {};
+    $("camtools").hidden = !scanning; $("scan-diag").hidden = !scanning; if (!scanning) return;
+    $("cam-zoom").hidden = zoomSteps().length < 2; $("cam-zoom").textContent = `Zoom ${camPref.zoom}×`;
+    $("cam-light").hidden = !caps.torch; $("cam-light").classList.toggle("on", !!cur.torch);
+    const i = cams.findIndex(c => c.deviceId === cur.deviceId); $("cam-switch").hidden = cams.length < 2; $("cam-switch").textContent = `Switch camera (${i + 1} of ${cams.length})`;
+    $("scan-diag").textContent = `Reader: ${detector ? "built into this phone" : typeof jsQR === "function" ? "basic (this browser has no built-in one)" : "none loaded"} · camera ${video.videoWidth || "?"}×${video.videoHeight || "?"}${caps.zoom ? ` · zoom ${camPref.zoom}×` : " · no zoom control"} · ${frames} looks${scanErr ? " · last problem: " + scanErr : ""} · ${APP_VERSION}`;
+  }
+  $("cam-zoom").onclick = async () => { const st = zoomSteps(); camPref.zoom = st[(st.indexOf(camPref.zoom) + 1) % st.length]; store.set("lot26.cam", camPref); await tune({ zoom: camPref.zoom }); renderCamTools(); };
+  $("cam-light").onclick = async () => { const on = !(track.getSettings().torch); await tune({ torch: on }); renderCamTools(); };
+  $("cam-switch").onclick = async () => { const cur = track.getSettings().deviceId, i = cams.findIndex(c => c.deviceId === cur); camPref.deviceId = cams[(i + 1) % cams.length].deviceId; store.set("lot26.cam", camPref); stopScan(); await startScan(); };
+
+  async function readFrame() {
+    const w = video.videoWidth, h = video.videoHeight;
+    if (detector) {
+      try { const found = await detector.detect(video);
+        if (found && found.length) { const mid = c => { const b = c.boundingBox || { x: 0, y: 0, width: w, height: h }; return Math.hypot(b.x + b.width / 2 - w / 2, b.y + b.height / 2 - h / 2); };
+          return found.slice().sort((p, q) => mid(p) - mid(q))[0].rawValue || ""; } }     // several labels in view: take the one nearest the centre
+      catch (e) { if (++detErr > 8) detector = null; }
     }
-    setTimeout(() => requestAnimationFrame(tick), 120);
+    if (typeof jsQR !== "function") return "";
+    const cw = Math.round(w * 0.62), ch = Math.round(h * 0.62), s = Math.min(1, 1000 / cw);   // centre of the frame at (near) full sharpness, not the whole frame shrunk
+    canvas.width = Math.round(cw * s); canvas.height = Math.round(ch * s);
+    ctx.drawImage(video, (w - cw) / 2, (h - ch) / 2, cw, ch, 0, 0, canvas.width, canvas.height);
+    const img = ctx.getImageData(0, 0, canvas.width, canvas.height), code = jsQR(img.data, img.width, img.height, { inversionAttempts: "dontInvert" });
+    return (code && code.data) || "";
+  }
+  async function tick() {
+    if (!scanning) return;
+    try {
+      if (video.readyState >= 2 && video.videoWidth) {
+        frames++;
+        const id = parseId(await readFrame()), now = Date.now();
+        if (id && run) await handleRunScan(id);
+        else if (id && (id !== lastHit || now - lastAt > 2500)) { lastHit = id; lastAt = now; if (navigator.vibrate) navigator.vibrate(40); show(id); setStatus(`Read ${CLASSWORD[id[0]]} ${id.slice(1)}. Still scanning — point at the next label or tap Stop.`, "ok"); }
+      }
+    } catch (e) { scanErr = (e && e.message) || "unknown"; }                                  // one bad frame must never stop the scanner
+    if (frames % 8 === 0) renderCamTools();
+    setTimeout(() => requestAnimationFrame(tick), detector ? 90 : 130);
   }
 
   // ---- fallbacks when sync is not available ----
