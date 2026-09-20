@@ -1,0 +1,756 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Lot 26 boxes</title>
+<style>
+  :root {
+    box-sizing: border-box;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    --bg: #ffffff; --ink: #111111; --muted: #5a5a5a; --line: #d9d9d9; --panel: #f3f3f3;
+    --btn: #111111; --btn-ink: #ffffff; --ok: #1E8A4C; --warn: #C8102E;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) { --bg: #141414; --ink: #f2f2f2; --muted: #b0b0b0; --line: #333; --panel: #1f1f1f; --btn: #f2f2f2; --btn-ink: #111; }
+  }
+  :root[data-theme="dark"] { --bg: #141414; --ink: #f2f2f2; --muted: #b0b0b0; --line: #333; --panel: #1f1f1f; --btn: #f2f2f2; --btn-ink: #111; }
+  html { scroll-padding-top: env(safe-area-inset-top, 0px); }
+  html, body { height: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 17px/1.35 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 560px; margin: 0 auto; padding: 14px 14px 40px; }
+  h1 { font-size: 20px; margin: 4px 0 2px; font-weight: 700; }
+  .sub { color: var(--muted); font-size: 14px; margin: 0 0 12px; }
+  button { font: inherit; font-weight: 600; border: 0; border-radius: 10px; padding: 13px 16px; background: var(--btn); color: var(--btn-ink); cursor: pointer; }
+  button.quiet { background: var(--panel); color: var(--ink); border: 1px solid var(--line); }
+  .filebtn { display: inline-block; text-align: center; font-weight: 600; border-radius: 10px; padding: 13px 16px; cursor: pointer; position: relative; overflow: hidden; }
+  .filebtn.quiet { background: var(--panel); color: var(--ink); border: 1px solid var(--line); }
+  .filebtn input { position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; cursor: pointer; font-size: 100px; }
+  button:focus-visible, input:focus-visible { outline: 3px solid #1F5FBF; outline-offset: 2px; }
+  .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .row > * { flex: 1 1 auto; }
+  input[type=text] { font: inherit; font-size: 22px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); color: var(--ink); width: 100%; box-sizing: border-box; letter-spacing: .04em; }
+  .scan { position: relative; background: #000; border-radius: 12px; overflow: hidden; aspect-ratio: 4/3; display: none; margin: 10px 0; }
+  .scan.on { display: block; }
+  .scan video { width: 100%; height: 100%; object-fit: cover; }
+  .scan .frame { position: absolute; inset: 14% 12%; border: 3px solid rgba(255,255,255,.85); border-radius: 10px; pointer-events: none; }
+  .status { font-size: 15px; color: var(--muted); margin: 8px 0 0; min-height: 1.3em; }
+  .status.warn { color: var(--warn); }
+  .status.ok { color: var(--ok); }
+  hr { border: 0; border-top: 1px solid var(--line); margin: 18px 0; }
+
+  /* Result: mirrors the printed label */
+  .label { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; margin-top: 14px; background: #fff; color: #111; }
+  .block { padding: 12px 14px 14px; color: #fff; }
+  .block.dark-ink { color: #111; }
+  .block .top { display: flex; justify-content: space-between; font-weight: 700; font-size: 18px; }
+  .block .stage { font-weight: 800; font-size: clamp(34px, 11vw, 52px); line-height: 1.05; letter-spacing: .01em; margin-top: 4px; }
+  .hazard { background: repeating-linear-gradient(45deg, #F2C230 0 18px, #111 18px 30px); }
+  .hazard .top, .hazard .stage { background: #111; color: #fff; display: inline-block; padding: 2px 10px; border-radius: 6px; }
+  .hazard .top { display: flex; }
+  .body { padding: 12px 14px 14px; }
+  .final { font-size: 15px; color: #555; }
+  .final b { display: block; color: #111; font-size: 26px; line-height: 1.15; }
+  .setband { background: #111; color: #fff; text-align: center; font-weight: 700; padding: 8px 10px; border-radius: 8px; margin: 10px 0; }
+  dl { margin: 12px 0 0; display: grid; grid-template-columns: 9.5em 1fr; gap: 6px 10px; font-size: 16px; }
+  dt { color: #666; } dd { margin: 0; overflow-wrap: anywhere; }
+  .hand { font-size: 22px; line-height: 1.25; margin: 10px 0 0; white-space: pre-wrap; }
+  .unprinted { background: #fff7d6; border-left: 4px solid #F2C230; padding: 8px 10px; margin-top: 10px; font-size: 18px; white-space: pre-wrap; }
+  .sight { margin-top: 12px; font-size: 15px; color: #444; }
+  .sight li { margin: 2px 0; }
+  .empty { padding: 26px 14px; text-align: center; color: var(--muted); border: 1px dashed var(--line); border-radius: 12px; margin-top: 14px; }
+
+  details { margin-top: 10px; }
+  summary { cursor: pointer; font-weight: 600; }
+  .log { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px; white-space: pre; overflow-x: auto; max-height: 220px; }
+  .chips { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  .chips button { flex: 1 1 30%; padding: 11px 8px; }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+
+  /* ---- v2 additions ---- */
+  [hidden] { display: none !important; }
+  .row.tight { flex-wrap: nowrap; } .row.tight input { min-width: 0; }
+  .head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .pill { flex: 0 0 auto; font-size: 14px; padding: 8px 12px; border-radius: 999px; }
+  .pill.ok { background: #e4f4ea; color: #12613a; border-color: #b9dfc8; }
+  .pill.wait { background: #fff3cf; color: #6b4e00; border-color: #ecd58a; }
+  .pill.bad { background: #fde3e6; color: #8f0c20; border-color: #f0b3bb; }
+  #practice { position: sticky; top: 0; z-index: 5; text-align: center; font-weight: 800; padding: 8px 10px; color: #111;
+    background: repeating-linear-gradient(45deg, #F2C230 0 18px, #ffe28a 18px 30px); border-bottom: 2px solid #111; }
+  #runbar { position: sticky; top: 0; z-index: 4; display: flex; align-items: center; gap: 10px; background: var(--btn); color: var(--btn-ink);
+    border-radius: 12px; padding: 10px 12px; margin: 8px 0; font-weight: 700; }
+  #practice:not([hidden]) ~ main #runbar { top: 38px; }
+  #runbar .what { flex: 1 1 auto; line-height: 1.2; } #runbar .what small { display: block; font-weight: 500; opacity: .8; }
+  #runbar button { flex: 0 0 auto; background: var(--bg); color: var(--ink); padding: 9px 14px; }
+  .panel { border: 1px solid var(--line); border-radius: 12px; padding: 12px; margin-top: 10px; background: var(--panel); }
+  .panel .ptitle { margin: 0 0 8px; font-weight: 700; }
+  .field { display: block; margin-top: 10px; font-size: 14px; color: var(--muted); }
+  .field input, .field select, .field textarea { display: block; width: 100%; box-sizing: border-box; margin-top: 4px; font: inherit; font-size: 17px; letter-spacing: 0;
+    padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); color: var(--ink); }
+  .chips button.on { background: var(--btn); color: var(--btn-ink); border-color: var(--btn); }
+  #hit { border-radius: 12px; overflow: hidden; margin: 10px 0; border: 1px solid var(--line); background: #fff; color: #111; }
+  #hit .block .stage { font-size: clamp(30px, 10vw, 46px); }
+  #hit .verdict { display: flex; align-items: center; gap: 10px; padding: 10px 14px; font-weight: 700; font-size: 19px; }
+  #hit .verdict span { flex: 1 1 auto; } #hit .verdict button { flex: 0 0 auto; padding: 8px 12px; font-size: 15px; }
+  #hit.ok .verdict { background: #e4f4ea; color: #12613a; } #hit.dup .verdict { background: #eee; color: #444; } #hit.warn .verdict { background: #fff3cf; color: #6b4e00; }
+  .label .edit { margin-top: 14px; border-top: 1px solid #ddd; padding-top: 10px; }
+  .label .field { color: #555; } .label .field textarea, .label .field select { background: #fff; color: #111; border-color: #ccc; }
+  .label .elabel { font-size: 14px; color: #555; margin-top: 10px; }
+  .label button.quiet { background: #f3f3f3; color: #111; border: 1px solid #d0d0d0; }
+  .label button.quiet.on { background: #111; color: #fff; border-color: #111; }
+  .label .save { background: #111; color: #fff; }
+  .thumbs { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; } .thumbs img { width: 76px; height: 76px; object-fit: cover; border-radius: 8px; border: 1px solid #ccc; }
+  .pcount { font-size: 14px; color: #555; margin-top: 6px; }
+  .daylist { margin-top: 14px; } .daylist h2 { font-size: 17px; margin: 0 0 6px; }
+  .daylist.done { color: var(--ok); font-weight: 700; }
+  .idlist { display: flex; flex-direction: column; gap: 6px; }
+  .idlist button { display: flex; gap: 10px; align-items: baseline; text-align: left; padding: 10px 12px; font-weight: 500; }
+  .idlist button b { flex: 0 0 auto; font-variant-numeric: tabular-nums; } .idlist button span { color: var(--muted); font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .counts { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; font-size: 16px; margin: 8px 0; } .counts b { text-align: right; font-variant-numeric: tabular-nums; }
+  .note { font-size: 14px; color: var(--muted); margin: 6px 0 0; } .note.warn { color: var(--warn); }
+  .sub.warn { color: var(--warn); }
+</style>
+</head>
+<body>
+<div id="practice" hidden>Practice mode — nothing you do here counts</div>
+<main>
+  <div class="head">
+    <h1>Lot 26 boxes</h1>
+    <button id="pill" class="pill quiet" aria-live="polite">Starting…</button>
+  </div>
+  <p class="sub" id="inv-status">No inventory yet.</p>
+
+  <div id="runbar" hidden><div class="what" id="run-what"></div><button id="run-end">Finish</button></div>
+
+  <div class="row" id="main-actions">
+    <button id="btn-scan">Scan a label</button>
+    <button id="btn-run" class="quiet">Loading or unloading day</button>
+  </div>
+
+  <div id="run-setup" class="panel" hidden>
+    <p class="ptitle">What are you doing?</p>
+    <div class="chips" id="run-types">
+      <button class="quiet" data-type="LOADED">Loading</button>
+      <button class="quiet" data-type="RECEIVED">Unloading</button>
+      <button class="quiet" data-type="PLACED">Putting in rooms</button>
+    </div>
+    <div id="run-load-fields" hidden>
+      <label class="field">Container it's going into<input id="run-container" type="text" list="containers" placeholder="POD1" autocomplete="off" autocapitalize="characters"></label>
+      <datalist id="containers"></datalist>
+      <label class="field">Wave<select id="run-wave"><option value="W1">Wave 1 — the pod</option><option value="W2">Wave 2 — the main move</option><option value="W3">Wave 3 — after the sale</option><option value="">Not decided</option></select></label>
+    </div>
+    <div class="row" style="margin-top:12px"><button id="run-start" disabled>Start scanning</button><button id="run-cancel" class="quiet">Cancel</button></div>
+    <p class="note">Every label you scan is recorded by itself — no tapping per box. A second scan of the same box is ignored.</p>
+  </div>
+
+  <div class="scan" id="scan"><video id="video" playsinline muted></video><div class="frame"></div></div>
+  <div id="hit" hidden></div>
+  <p class="status" id="scan-status"></p>
+
+  <div class="row tight" style="margin-top:10px">
+    <input id="manual" type="text" inputmode="numeric" placeholder="or type a number: 052, F013, E002" autocomplete="off">
+    <button id="btn-go" class="quiet" style="flex:0 0 auto">Look up</button>
+  </div>
+
+  <div id="result"></div>
+  <div id="daylists"></div>
+
+  <hr>
+  <details id="d-where"><summary>Where everything is</summary><div id="where"></div></details>
+
+  <details id="d-settings">
+    <summary>Settings and sync</summary>
+    <label class="field">Your name (goes on everything this phone records)<input id="cfg-who" type="text" placeholder="Eric" autocomplete="off"></label>
+    <label class="field">Sync address<input id="cfg-url" type="url" placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off" autocapitalize="none" spellcheck="false"></label>
+    <label class="field">Passphrase<input id="cfg-token" type="text" autocomplete="off" autocapitalize="none" spellcheck="false"></label>
+    <label class="field">Photo size<select id="cfg-photo"><option value="2560">Standard — sharp, quick to upload</option><option value="0">Full size — slower on cellular</option></select></label>
+    <label class="field" style="display:flex;gap:10px;align-items:center;color:var(--ink);font-size:16px"><input id="cfg-practice" type="checkbox" style="width:22px;height:22px;flex:0 0 auto;margin:0"> Practice mode — record to a separate practice file</label>
+    <div class="row" style="margin-top:12px"><button id="cfg-save">Save and test</button><button id="cfg-sync" class="quiet">Sync now</button></div>
+    <div class="row" style="margin-top:8px"><button id="cfg-link" class="quiet">Copy setup link for another phone</button></div>
+    <p class="note" id="sync-detail"></p>
+    <p class="note">The setup link contains the sync address and passphrase. Send it only to the other phone.</p>
+  </details>
+
+  <details id="d-journal">
+    <summary>Recorded on this phone</summary>
+    <p class="note" id="journal-note"></p>
+    <div class="row" style="margin-top:8px"><button id="j-share" class="quiet">Share as a file</button><button id="j-copy" class="quiet">Copy as text</button></div>
+    <div class="row" style="margin-top:8px"><button id="j-photos" class="quiet">Save waiting photos to this phone</button></div>
+    <p class="note">Only needed if sync is not available. Everything here is also kept on the phone until you clear the browser's data.</p>
+  </details>
+
+  <details id="d-byhand">
+    <summary>Load inventory by hand</summary>
+    <p class="note">With sync set up, inventory refreshes from Drive by itself. This is the fallback.</p>
+    <div class="row" style="margin-top:8px">
+      <label class="filebtn quiet" for="file-inv">Load inventory.csv<input id="file-inv" type="file" accept=".csv,text/csv,text/plain,*/*"></label>
+      <button id="btn-paste" class="quiet">Paste CSV text</button>
+    </div>
+    <div id="paste-box" hidden style="margin-top:8px">
+      <textarea id="paste-text" rows="6" style="width:100%;box-sizing:border-box;font:13px ui-monospace,monospace;border:1px solid var(--line);border-radius:10px;padding:8px;background:var(--bg);color:var(--ink)" placeholder="id,class,dest,stage,..."></textarea>
+      <div class="row" style="margin-top:6px"><button id="btn-paste-inv" class="quiet">Use as inventory</button></div>
+    </div>
+  </details>
+  <input id="cam" type="file" accept="image/*" capture="environment" hidden>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"></script>
+<script>
+(function () {
+  // ---- namespace (mirrors make_labels.py) ----
+  const F1 = new Set(["FOYER","GARAGE-ENTRY-HALL","DINING","KITCHEN","PANTRY","FAMILY-ROOM","POWDER","FLEX","GARAGE","NEXTGEN-ENTRY","NEXTGEN-LIVING","NEXTGEN-BED","NEXTGEN-BATH","NEXTGEN-LAUNDRY","NEXTGEN-CLOS"]);
+  const F2 = new Set(["LOFT","MAIN-HALL","PRIMARY","PRIMARY-BATH","PRIMARY-WIC-A","PRIMARY-WIC-B","BED-2","BATH-2","BED-2-WIC","BED-3","BATH-3","BED-3-WIC","LAUNDRY","LINEN"]);
+  const OUT = new Set(["CA-ROOM","PORCH","DECK"]);
+  const STAGE = {
+    "PRIMARY":["#1E8A4C","white"], "BED-2":["#C8102E","white"], "BED-3":["#E8720C","white"], "LOFT":["#6B4423","white"],
+    "LAUNDRY":["#F2C230","black"], "KITCHEN":["#1F5FBF","white"], "FLEX":["#6A2C91","white"], "DINING":["#0E8C8C","white"],
+    "FAMILY-ROOM":["#D6338F","white"], "NEXTGEN-LIVING":["#1A1A1A","white"], "NEXTGEN-BED":["#8A8F94","black"], "GARAGE":["hazard","white"]
+  };
+  const DEST_TO_STAGE = {"PRIMARY":"PRIMARY","PRIMARY-BATH":"PRIMARY","PRIMARY-WIC-A":"PRIMARY","PRIMARY-WIC-B":"PRIMARY","BED-2":"BED-2","BATH-2":"BED-2","BED-2-WIC":"BED-2","BED-3":"BED-3","BATH-3":"BED-3","BED-3-WIC":"BED-3","LOFT":"LOFT","MAIN-HALL":"LOFT","DECK":"LOFT","LAUNDRY":"LAUNDRY","LINEN":"LAUNDRY","KITCHEN":"KITCHEN","PANTRY":"KITCHEN","FLEX":"FLEX","DINING":"DINING","CA-ROOM":"DINING","FAMILY-ROOM":"FAMILY-ROOM","FOYER":"FAMILY-ROOM","POWDER":"FAMILY-ROOM","PORCH":"FAMILY-ROOM","NEXTGEN-LIVING":"NEXTGEN-LIVING","NEXTGEN-ENTRY":"NEXTGEN-LIVING","NEXTGEN-LAUNDRY":"NEXTGEN-LIVING","NEXTGEN-BED":"NEXTGEN-BED","NEXTGEN-BATH":"NEXTGEN-BED","NEXTGEN-CLOS":"NEXTGEN-BED","GARAGE":"GARAGE","GARAGE-ENTRY-HALL":"GARAGE"};
+  const DISPLAY = {"PRIMARY":"PRIMARY BEDROOM","PRIMARY-BATH":"PRIMARY BATH","PRIMARY-WIC-A":"PRIMARY WALK-IN CLOSET A","PRIMARY-WIC-B":"PRIMARY WALK-IN CLOSET B","BED-2":"BEDROOM 2","BATH-2":"BATHROOM 2","BED-2-WIC":"BEDROOM 2 WALK-IN CLOSET","BED-3":"BEDROOM 3","BATH-3":"BATHROOM 3","BED-3-WIC":"BEDROOM 3 WALK-IN CLOSET","FAMILY-ROOM":"FAMILY ROOM","CA-ROOM":"CALIFORNIA ROOM","MAIN-HALL":"MAIN HALL","GARAGE-ENTRY-HALL":"GARAGE ENTRY HALL","NEXTGEN-LIVING":"NEXTGEN LIVING","NEXTGEN-BED":"NEXTGEN BEDROOM","NEXTGEN-BATH":"NEXTGEN BATH","NEXTGEN-ENTRY":"NEXTGEN ENTRY","NEXTGEN-LAUNDRY":"NEXTGEN LAUNDRY","NEXTGEN-CLOS":"NEXTGEN CLOSET"};
+  const TX = {"TX-GARAGE":"Garage","TX-KITCHEN":"Kitchen","TX-PANTRY":"Pantry","TX-LAUNDRY":"Laundry","TX-SUNROOM":"Sunroom","TX-LIVING":"Living Room","TX-DINING":"Dining Room","TX-OFFICE":"Office","TX-UNDERSTAIRS":"Understairs Storage","TX-PRIMARY":"Primary Bedroom","TX-PRIMARY-BATH":"Primary Bath","TX-VANITY-ERIC":"Primary Bath Vanity (Eric)","TX-VANITY-LISA":"Primary Bath Vanity (Lisa)","TX-BATH-LINEN":"Primary Bath Linen","TX-BATH-WC":"Primary Bath WC","TX-WIC-LISA":"Primary WIC (Lisa)","TX-WIC-ERIC":"Primary WIC (Eric)","TX-LINEN-2":"2nd Floor Hall Linen","TX-GAMEROOM":"Game Room","TX-STORAGE":"Storage Room","TX-WRAP":"Wrap Room","TX-OPT-BED":"Optional Bedroom","TX-GUEST":"Guest Room"};
+  const CLASSWORD = {B:"Box", F:"Furniture", E:"Equip"};
+  const disp = t => DISPLAY[t] || (t || "").replace(/-/g, " ");
+  const floorOf = t => OUT.has(t) ? "Outdoor" : (F1.has(t) || (t||"").startsWith("NEXTGEN") || t === "GARAGE") ? "Floor 1" : F2.has(t) ? "Floor 2" : "";
+  const stageOf = r => (r.stage || "").trim().toUpperCase() || DEST_TO_STAGE[(r.dest||"").trim().toUpperCase()] || "GARAGE";
+
+  // ---- core: events -> state. No DOM in this block (it is unit-tested on its own). ----
+  const CHECKPOINTS = ["PACKED", "LOADED", "RECEIVED", "PLACED"];
+  const EV_COLS = ["event_id", "ts", "who", "id", "type", "field", "value", "container", "wave", "location", "photo", "note"];
+  const W1_WORDS = { MUST: "Must go", OK: "Can go if there's room", NO: "Not in the pod" };
+
+  function uuid() {
+    if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
+    const b = new Uint8Array(16);
+    if (typeof crypto !== "undefined" && crypto.getRandomValues) crypto.getRandomValues(b); else for (let i = 0; i < 16; i++) b[i] = Math.random() * 256;
+    b[6] = (b[6] & 0x0f) | 0x40; b[8] = (b[8] & 0x3f) | 0x80;
+    const h = Array.from(b, x => x.toString(16).padStart(2, "0")).join("");
+    return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
+  }
+
+  function mkEvent(who, id, type, extra) {
+    const ev = { event_id: uuid(), ts: new Date().toISOString(), who: who || "", id, type };
+    for (const c of EV_COLS) if (!(c in ev)) ev[c] = "";
+    return Object.assign(ev, extra || {});
+  }
+
+  // ID parsing: works for every QR format printed so far, and for typed numbers.
+  function parseId(text) {
+    if (!text) return null;
+    let m = text.match(/\b(Box|Equip(?:ment)?|Furniture)\s*[:#]?\s*(\d{1,3})\b/i);
+    if (m) return ({ box: "B", equip: "E", equipment: "E", furniture: "F" })[m[1].toLowerCase()] + m[2].padStart(3, "0");
+    m = text.trim().match(/^([BEF])[-\s]?(\d{1,3})$/i);
+    if (m) return m[1].toUpperCase() + m[2].padStart(3, "0");
+    m = text.trim().match(/^(\d{1,3})$/);
+    if (m) return "B" + m[1].padStart(3, "0");
+    return null;
+  }
+
+  // Union by event_id, oldest first. The same event arriving from the phone and from Drive counts once.
+  function mergeEvents() {
+    const seen = new Map();
+    for (const list of arguments) for (const e of (list || [])) if (e && e.event_id && !seen.has(e.event_id)) seen.set(e.event_id, e);
+    return Array.from(seen.values()).sort((a, b) => (a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : a.event_id < b.event_id ? -1 : 1));
+  }
+
+  // inventory rows + events -> what is true about every item right now.
+  function deriveState(rows, events) {
+    const undone = new Set(events.filter(e => e.type === "UNDO").map(e => e.value));
+    const items = {};
+    const get = id => items[id] || (items[id] = { id, base: null, edits: {}, history: [], photos: [], unknown: true });
+    for (const r of (rows || [])) { const id = (r.id || "").trim().toUpperCase(); if (id) { const it = get(id); it.base = r; it.unknown = false; } }
+    for (const e of events) {
+      if (e.type === "UNDO" || undone.has(e.event_id)) continue;
+      const it = get((e.id || "").trim().toUpperCase());
+      if (e.type === "EDIT") it.edits[e.field] = e.value;               // events are oldest-first, so the last write wins
+      else if (e.type === "PHOTO") it.photos.push(e.photo);
+      else if (CHECKPOINTS.includes(e.type) || e.type === "SEEN") it.history.push(e);
+    }
+    for (const it of Object.values(items)) {
+      it.row = Object.assign({ id: it.id, class: it.id[0] }, it.base || {}, it.edits);
+      const cps = it.history.filter(e => e.type !== "SEEN");
+      it.last = cps.length ? cps[cps.length - 1] : null;
+      it.loaded = null;
+      for (const e of cps) if (e.type === "LOADED") it.loaded = e;
+      it.arrived = !!(it.loaded && cps.some(e => (e.type === "RECEIVED" || e.type === "PLACED") && e.ts > it.loaded.ts));
+      it.received = cps.some(e => e.type === "RECEIVED" || e.type === "PLACED");
+      if (it.loaded) { if (it.loaded.wave) it.row.wave = it.loaded.wave; it.container = it.loaded.container || ""; }
+      it.w1 = (it.row.w1 || "").trim().toUpperCase();
+    }
+    return { items, undone };
+  }
+
+  // The three lists that matter on a loading or unloading day.
+  function dayLists(state) {
+    const all = Object.values(state.items).sort((a, b) => (a.id < b.id ? -1 : 1));
+    const counts = { total: all.filter(i => !i.unknown).length, PACKED: 0, LOADED: 0, RECEIVED: 0, PLACED: 0, none: 0, photos: 0, unknown: all.filter(i => i.unknown).length };
+    for (const i of all) { counts[i.last ? i.last.type : "none"]++; if (i.photos.length) counts.photos++; }
+    const transit = all.filter(i => i.loaded && !i.arrived);
+    const byContainer = {};
+    for (const i of transit) (byContainer[i.container || "(no container noted)"] = byContainer[i.container || "(no container noted)"] || []).push(i);
+    return {
+      counts,
+      mustNotLoaded: all.filter(i => i.w1 === "MUST" && !i.loaded),
+      canGo: all.filter(i => i.w1 === "OK" && !i.loaded),
+      inTransit: transit, byContainer
+    };
+  }
+
+  // What should happen when a label is scanned during a run. Pure decision; the caller logs and announces it.
+  function runVerdict(item, run) {
+    if (run.type === "LOADED") {
+      if (item && item.loaded && !item.arrived) return { log: false, tone: "dup", text: `Already loaded${item.container ? " in " + item.container : ""}` };
+      if (item && item.w1 === "NO") return { log: true, tone: "warn", text: "Loaded — but this one was marked “Not in the pod”" };
+      return { log: true, tone: "ok", text: "Loaded" };
+    }
+    if (run.type === "RECEIVED") {
+      if (item && item.arrived) return { log: false, tone: "dup", text: "Already checked in" };
+      if (!item || !item.loaded) return { log: true, tone: "warn", text: "Arrived — it was never scanned at loading" };
+      return { log: true, tone: "ok", text: "Arrived" };
+    }
+    if (run.type === "PLACED") {
+      if (item && item.last && item.last.type === "PLACED") return { log: false, tone: "dup", text: "Already placed" };
+      return { log: true, tone: "ok", text: "Placed" };
+    }
+    if (item && item.last && item.last.type === run.type) return { log: false, tone: "dup", text: "Already marked " + run.type.toLowerCase() };
+    return { log: true, tone: "ok", text: run.type[0] + run.type.slice(1).toLowerCase() };
+  }
+
+  const csvCell = v => { const s = String(v == null ? "" : v).replace(/\r\n?/g, "\n"); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+  const eventsCsv = evs => [EV_COLS.join(",")].concat(evs.map(e => EV_COLS.map(c => csvCell(e[c])).join(","))).join("\n") + "\n";
+
+  // Photo file name, fixed at capture: <ID>_<YYYYMMDD>_<HHMMSS>_<who>.jpg — local time, because that is what a person browsing the folder expects.
+  function photoName(id, d, who) {
+    const p = n => String(n).padStart(2, "0");
+    const w = (who || "").replace(/[^A-Za-z0-9]/g, "").slice(0, 12) || "X";
+    return `${id}_${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}_${w}.jpg`;
+  }
+
+  // Rows logged by the first version of this app become events with a stable id, so importing twice changes nothing.
+  const fromV1Sighting = s => ({ event_id: `v1-${s.id}-${s.checkpoint}-${s.timestamp}`.replace(/[^A-Za-z0-9:._-]/g, ""), ts: s.timestamp, who: s.who || "", id: s.id, type: s.checkpoint,
+    field: "", value: "", container: s.container || "", wave: "", location: s.location || "", photo: s.photo || "", note: s.note || "" });
+
+  // ---- storage: small things in localStorage (shared with v1), events and photos in IndexedDB ----
+  const APP_VERSION = "Box app 2.0 (2026-09-20)";
+  const $ = id => document.getElementById(id);
+  const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const store = { get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } },
+                  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { return false; } } };
+  const idb = {
+    db: null,
+    open() { return new Promise(res => { if (!window.indexedDB) return res(false);
+      const rq = indexedDB.open("lot26", 1);
+      rq.onupgradeneeded = () => { const d = rq.result; if (!d.objectStoreNames.contains("kv")) d.createObjectStore("kv"); if (!d.objectStoreNames.contains("photos")) d.createObjectStore("photos", { keyPath: "key" }); };
+      rq.onsuccess = () => { idb.db = rq.result; res(true); }; rq.onerror = () => res(false); rq.onblocked = () => res(false); }); },
+    tx(name, mode, fn) { return new Promise((res, rej) => { if (!idb.db) return rej(new Error("no storage"));
+      const t = idb.db.transaction(name, mode); const out = fn(t.objectStore(name)); t.oncomplete = () => res(out && out.result); t.onerror = t.onabort = () => rej(t.error || new Error("storage")); }); },
+    get: k => idb.tx("kv", "readonly", s => s.get(k)).catch(() => null),
+    set: (k, v) => idb.tx("kv", "readwrite", s => s.put(v, k)),
+    putPhoto: rec => idb.tx("photos", "readwrite", s => s.put(rec)),
+    delPhoto: key => idb.tx("photos", "readwrite", s => s.delete(key)),
+    photos: nsName => idb.tx("photos", "readonly", s => s.getAll()).then(a => (a || []).filter(p => p.ns === nsName)).catch(() => [])
+  };
+
+  let cfg = Object.assign({ who: "", url: "", token: "", photoMax: 2560, practice: false }, store.get("lot26.cfg") || {});
+  let inventory = store.get("lot26.inventory") || null;      // {rows, loaded, name, modified, copies} — same key v1 uses
+  let local = [], server = [], state = { items: {}, undone: new Set() }, lists = null;
+  let run = store.get("lot26.run") || null;                  // {type, container, wave, count}
+  let currentId = null, dirty = false, photosWaiting = 0;
+  const sync = { busy: false, again: false, lastOk: 0, lastTry: 0, lastPull: 0, error: "", code: "" };
+  const thumbs = {};                                          // id -> [objectURL] for photos taken this session
+  const ns = () => (cfg.practice ? "test" : "live");
+
+  // ---- recompute + render ----
+  function recompute() {
+    state = deriveState(inventory ? inventory.rows : [], mergeEvents(server, local));
+    lists = dayLists(state);
+    renderHeader(); renderPill(); renderRun(); renderDayLists(); renderWhere(); renderJournal();
+  }
+  function renderHeader() {
+    $("practice").hidden = !cfg.practice;
+    const el = $("inv-status");
+    if (!inventory) { el.textContent = cfg.url ? "No inventory yet — it arrives with the first sync." : "No inventory yet. Open “Settings and sync”, or load inventory.csv by hand."; return; }
+    const when = new Date(inventory.loaded).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+    el.textContent = `${inventory.rows.length} items · inventory from ${inventory.name || "file"}, ${when}` + (inventory.copies > 1 ? ` · Drive holds ${inventory.copies} files named inventory.csv — using the newest` : "");
+    el.className = "sub" + (inventory.copies > 1 ? " warn" : "");
+  }
+  const pending = () => local.filter(e => !e.synced).length;
+  function renderPill() {
+    const p = $("pill"), n = pending();
+    let text, cls;
+    if (!cfg.url || !cfg.token) { text = n ? `${n} on this phone only` : "This phone only"; cls = "quiet"; }
+    else if (sync.busy) { text = n ? `Saving ${n}…` : "Checking…"; cls = "wait"; }
+    else if (sync.code === "auth" || sync.code === "setup") { text = "Sync problem — tap"; cls = "bad"; }
+    else if (n) { text = `${n} waiting — will retry`; cls = "wait"; }
+    else if (sync.error) { text = "Offline — all kept here"; cls = "wait"; }
+    else if (!sync.lastOk) { text = "Not synced yet"; cls = "wait"; }
+    else { text = "All saved"; cls = "ok"; }
+    p.textContent = text; p.className = "pill quiet " + (cls === "quiet" ? "" : cls);
+    const d = $("sync-detail");
+    d.textContent = (sync.lastOk ? `Last sync ${new Date(sync.lastOk).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}. ` : "") + (sync.error ? `Last attempt: ${sync.error}` : "") + (local.some(e => e.rejected) ? ` ${local.filter(e => e.rejected).length} entr${local.filter(e => e.rejected).length === 1 ? "y was" : "ies were"} refused by the server — see “Recorded on this phone”.` : "");
+    d.className = "note" + (sync.error ? " warn" : "");
+  }
+  function renderJournal() {
+    const n = pending();
+    $("journal-note").textContent = `${local.length} entr${local.length === 1 ? "y" : "ies"} recorded here${cfg.practice ? " (practice)" : ""}; ${n} not yet saved to Drive; ${photosWaiting} photo${photosWaiting === 1 ? "" : "s"} waiting to upload.` +
+      (local.some(e => e.rejected) ? " Refused: " + local.filter(e => e.rejected).map(e => `${e.id} ${e.type} (${e.rejected})`).join("; ") : "");
+  }
+  const describe = i => { const r = i.row; return [disp(stageOf(r)), (r.contents || "").trim(), (r.unprinted_contents || "").trim().split("\n")[0]].filter(Boolean).join(" — "); };
+  const idButtons = arr => `<div class="idlist">${arr.map(i => `<button class="quiet" data-open="${i.id}"><b>${CLASSWORD[i.id[0]] || ""} ${i.id.slice(1)}</b><span>${esc(describe(i))}</span></button>`).join("")}</div>`;
+  function wireOpen(root) { root.querySelectorAll("[data-open]").forEach(b => b.onclick = () => { show(b.dataset.open); $("result").scrollIntoView({ block: "start", behavior: "smooth" }); }); }
+
+  function renderDayLists() {
+    const el = $("daylists"); if (!run) { el.innerHTML = ""; return; }
+    let h = "";
+    if (run.type === "LOADED") {
+      h += lists.mustNotLoaded.length ? `<div class="daylist"><h2>Must go — not loaded yet (${lists.mustNotLoaded.length})</h2>${idButtons(lists.mustNotLoaded)}</div>`
+        : `<div class="daylist done">Every “Must go” item is loaded.</div>`;
+      if (lists.canGo.length) h += `<div class="daylist"><h2>Can go if there's room (${lists.canGo.length})</h2>${idButtons(lists.canGo)}</div>`;
+    } else if (run.type === "RECEIVED") {
+      const keys = Object.keys(lists.byContainer).sort();
+      h += keys.length ? keys.map(k => `<div class="daylist"><h2>${esc(k)} — loaded, not checked in yet (${lists.byContainer[k].length})</h2>${idButtons(lists.byContainer[k])}</div>`).join("")
+        : `<div class="daylist done">Everything that was loaded has been checked in.</div>`;
+    }
+    el.innerHTML = h; wireOpen(el);
+  }
+  function renderWhere() {
+    const c = lists.counts, el = $("where");
+    el.innerHTML = `<div class="counts">
+        <span>Items in the inventory</span><b>${c.total}</b>
+        <span>Not packed or scanned yet</span><b>${c.none}</b>
+        <span>Packed</span><b>${c.PACKED}</b><span>Loaded, on the way</span><b>${lists.inTransit.length}</b>
+        <span>Arrived</span><b>${c.RECEIVED}</b><span>In their rooms</span><b>${c.PLACED}</b>
+        <span>With at least one photo</span><b>${c.photos}</b>
+        ${c.unknown ? `<span>Scanned, but not in the inventory</span><b>${c.unknown}</b>` : ""}
+      </div>
+      ${lists.mustNotLoaded.length ? `<div class="daylist"><h2>Must go — not loaded yet (${lists.mustNotLoaded.length})</h2>${idButtons(lists.mustNotLoaded)}</div>` : ""}
+      ${lists.inTransit.length ? `<div class="daylist"><h2>Loaded, not checked in (${lists.inTransit.length})</h2>${idButtons(lists.inTransit)}</div>` : ""}
+      <p class="note">${APP_VERSION}</p>`;
+    wireOpen(el);
+  }
+
+  // ---- recording ----
+  async function persistLocal() { try { await idb.set(ns() + ":local", local); } catch (e) { setStatus("This phone's storage refused the entry. Free some space, then try again.", "warn"); } }
+  async function record(ev) { ev.synced = false; local.push(ev); recompute(); await persistLocal(); syncSoon(1200); return ev; }
+  const lastCheckpointOf = id => { const it = state.items[id]; return it && it.last; };
+
+  // ---- sync ----
+  async function api(action, payload) {
+    const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), action === "photo" ? 120000 : 30000);
+    try {
+      const res = await fetch(cfg.url, { method: "POST", redirect: "follow", signal: ctl.signal, headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify(Object.assign({ token: cfg.token, action, practice: !!cfg.practice }, payload || {})) });
+      if (!res.ok) throw new Error("The sync address answered with an error (" + res.status + ").");
+      let j; try { j = await res.json(); } catch (e) { throw new Error("The sync address did not answer as expected — check that it ends in /exec."); }
+      if (!j.ok) { const er = new Error(j.detail || j.error || "refused"); er.code = j.error; throw er; }
+      return j;
+    } finally { clearTimeout(timer); }
+  }
+  const wire = e => { const o = {}; for (const c of EV_COLS) o[c] = e[c] == null ? "" : e[c]; return o; };
+  const toBase64 = blob => new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(String(fr.result).split(",")[1] || ""); fr.onerror = () => rej(fr.error); fr.readAsDataURL(blob); });
+  let syncTimer = null;
+  function syncSoon(ms) { clearTimeout(syncTimer); syncTimer = setTimeout(syncNow, ms || 50); }
+
+  async function syncNow(forcePull) {
+    if (!cfg.url || !cfg.token) { renderPill(); return; }
+    if (sync.busy) { sync.again = true; return; }
+    sync.busy = true; sync.lastTry = Date.now(); renderPill();
+    const mode = ns();
+    try {
+      let unsent = local.filter(e => !e.synced && e.type !== "PHOTO");
+      while (unsent.length) {
+        const chunk = unsent.splice(0, 100), r = await api("events", { events: chunk.map(wire) });
+        const done = new Set([].concat(r.accepted || [], r.duplicates || [])), bad = {}; (r.rejected || []).forEach(x => bad[x.event_id] = x.why);
+        for (const e of chunk) { if (done.has(e.event_id)) e.synced = true; else if (bad[e.event_id]) { e.synced = true; e.rejected = bad[e.event_id]; } }
+        await persistLocal(); renderPill();
+      }
+      for (const rec of (await idb.photos(mode)).filter(p => !p.refused)) {
+        const e = local.find(x => x.event_id === rec.key);
+        try {
+          await api("photo", { filename: rec.name, data: await toBase64(rec.blob), event: wire(rec.event) });
+          await idb.delPhoto(rec.key); photosWaiting = Math.max(0, photosWaiting - 1); if (e) e.synced = true;
+        } catch (er) {
+          if (!/^photo/.test(er.code || "")) throw er;                       // connection or passphrase trouble: stop and retry later
+          rec.refused = er.message; await idb.putPhoto(rec); if (e) { e.synced = true; e.rejected = er.message; }   // the server said no to this one: keep the file here, move on
+        }
+        await persistLocal(); renderPill();
+      }
+      const s = (forcePull === true || Date.now() - sync.lastPull > 45000) ? await api("state") : null;
+      if (s && mode === ns()) {
+        sync.lastPull = Date.now();
+        if (s.inventory_csv) { const rows = Papa.parse(s.inventory_csv, { header: true, skipEmptyLines: true }).data;
+          if (rows.length && "id" in rows[0]) { inventory = { rows, loaded: new Date().toISOString(), name: "Drive", modified: s.inventory_modified, copies: s.inventory_copies }; store.set("lot26.inventory", inventory); } }
+        server = Papa.parse(s.events_csv || "", { header: true, skipEmptyLines: true }).data.filter(e => e.event_id);
+        await idb.set(mode + ":server", server).catch(() => {});
+      }
+      sync.lastOk = Date.now(); sync.error = ""; sync.code = "";
+    } catch (e) {
+      sync.code = e.code || "";
+      sync.error = e.code === "auth" ? "The passphrase was not accepted." : e.code === "setup" ? "The script has no passphrase set yet." : e.name === "AbortError" ? "No answer in time — will retry." : (navigator.onLine === false ? "No connection — will retry." : (e.message || "Could not reach the sync address."));
+    } finally {
+      sync.busy = false; recompute(); if (currentId && !dirty) show(currentId);
+      if (sync.again) { sync.again = false; syncSoon(500); }
+    }
+  }
+  setInterval(() => { if (document.hidden || !cfg.url) return; const idle = Date.now() - Math.max(sync.lastOk, sync.lastTry);
+    if ((pending() && idle > 20000) || (run && idle > 60000) || idle > 180000) syncNow(idle > 60000); }, 10000);
+  window.addEventListener("online", () => syncSoon(500));
+  document.addEventListener("visibilitychange", () => { if (document.hidden) { if (scanning) stopScan(); } else syncSoon(800); });
+
+  // ---- settings ----
+  function fillSettings() { $("cfg-who").value = cfg.who; $("cfg-url").value = cfg.url; $("cfg-token").value = cfg.token; $("cfg-photo").value = String(cfg.photoMax); $("cfg-practice").checked = !!cfg.practice; }
+  async function loadNamespace() { local = (await idb.get(ns() + ":local")) || []; server = (await idb.get(ns() + ":server")) || []; photosWaiting = (await idb.photos(ns())).length; }
+  async function saveSettings() {
+    const was = ns();
+    cfg = { who: $("cfg-who").value.trim(), url: $("cfg-url").value.trim(), token: $("cfg-token").value.trim(), photoMax: parseInt($("cfg-photo").value, 10) || 0, practice: $("cfg-practice").checked };
+    store.set("lot26.cfg", cfg);
+    sync.lastPull = 0;
+    if (was !== ns()) { currentId = null; $("result").innerHTML = ""; endRun(); await loadNamespace(); }
+    recompute();
+    if (!cfg.url || !cfg.token) { setStatus("Saved. Add the sync address and passphrase to turn on sync.", "ok"); return; }
+    setStatus("Testing the connection…");
+    try { const r = await api("ping"); setStatus(`Connected to ${r.version}${cfg.practice ? " — practice mode" : ""}.`, "ok"); if (cfg.who) $("d-settings").open = false; sync.error = ""; sync.code = ""; sync.lastPull = 0; syncSoon(); }
+    catch (e) { sync.code = e.code || ""; sync.error = e.message; renderPill(); setStatus("Could not connect: " + e.message, "warn"); }
+  }
+  $("cfg-save").onclick = saveSettings;
+  $("cfg-sync").onclick = () => { setStatus("Syncing…"); syncNow(true).then(() => setStatus(sync.error ? "Sync did not finish: " + sync.error : "Synced.", sync.error ? "warn" : "ok")); };
+  $("cfg-link").onclick = async () => {
+    if (!cfg.url || !cfg.token) { setStatus("Save the sync address and passphrase first.", "warn"); return; }
+    const link = location.origin + location.pathname + "#setup=" + encodeURIComponent(btoa(JSON.stringify({ u: cfg.url, t: cfg.token })));
+    try { await navigator.clipboard.writeText(link); setStatus("Setup link copied. Send it to the other phone and open it there in Chrome.", "ok"); } catch (e) { prompt("Copy this setup link:", link); }
+  };
+  $("pill").onclick = () => { $("d-settings").open = true; $("d-settings").scrollIntoView({ block: "start", behavior: "smooth" }); if (cfg.url) syncNow(true); };
+  function applySetupLink() {
+    const m = location.hash.match(/^#setup=(.+)$/); if (!m) return false;
+    try { const o = JSON.parse(atob(decodeURIComponent(m[1]))); if (o.u && o.t) { cfg.url = o.u; cfg.token = o.t; store.set("lot26.cfg", cfg); } } catch (e) {}
+    history.replaceState(null, "", location.pathname + location.search);
+    return true;
+  }
+
+  // ---- inventory by hand (fallback) ----
+  function useInventory(rows, name) {
+    if (!rows.length || !("id" in rows[0])) { setStatus("No “id” column found — is this inventory.csv?", "warn"); return; }
+    inventory = { rows, loaded: new Date().toISOString(), name: name || "file", copies: 1 }; store.set("lot26.inventory", inventory); recompute(); setStatus(`Loaded ${rows.length} items.`, "ok");
+  }
+  $("btn-paste").onclick = () => { const b = $("paste-box"); b.hidden = !b.hidden; if (!b.hidden) $("paste-text").focus(); };
+  $("btn-paste-inv").onclick = () => { const t = $("paste-text").value.trim(); if (!t) { setStatus("Paste the CSV text first.", "warn"); return; } useInventory(Papa.parse(t, { header: true, skipEmptyLines: true }).data, "pasted text"); };
+  $("file-inv").onchange = e => { const f = e.target.files[0]; if (!f) return;
+    Papa.parse(f, { header: true, skipEmptyLines: true, complete: res => useInventory(res.data, f.name), error: er => setStatus("Could not read that file: " + er.message, "warn") }); e.target.value = ""; };
+
+  // ---- the box card ----
+  const DEST_CHOICES = Array.from(new Set(Object.keys(DEST_TO_STAGE).concat(Object.keys(STAGE)))).sort((a, b) => disp(a).localeCompare(disp(b)));
+  function labelBlock(id, st) {
+    if (!st) return `<div class="block" style="background:#777"><div class="top"><span></span><span>${CLASSWORD[id[0]] || id[0]} ${id.slice(1)}</span></div><div class="stage">Not in the inventory</div></div>`;
+    const [fill, ink] = STAGE[st] || ["#888", "white"];
+    return `<div class="block ${fill === "hazard" ? "hazard" : ""} ${ink === "black" ? "dark-ink" : ""}" ${fill !== "hazard" ? `style="background:${fill}"` : ""}>
+        <div class="top"><span>${floorOf(st)}</span><span>${CLASSWORD[id[0]] || id[0]} ${id.slice(1)}</span></div><div class="stage">${disp(st)}</div></div>`;
+  }
+  const whenText = ts => { const d = new Date(ts); return isNaN(d) ? ts : d.toLocaleString([], { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }); };
+  const cpWords = { PACKED: "Packed", LOADED: "Loaded", RECEIVED: "Arrived", PLACED: "Placed in room", SEEN: "Seen" };
+
+  function show(id, keep) {
+    currentId = id; dirty = !!keep;
+    const out = $("result"), it = state.items[id];
+    if (!inventory && !it) { out.innerHTML = `<div class="empty">No inventory on this phone yet. Set up sync, or load inventory.csv by hand (both are further down).</div>`; return; }
+    const r = it ? it.row : { id, class: id[0] }, base = (it && it.base) || {};
+    const st = stageOf(r), dest = (r.dest || "").trim().toUpperCase();
+    const fields = [];
+    if (r.wave) fields.push(["Wave", r.wave.replace(/^W/i, "Wave ")]);
+    if (it && it.container) fields.push(["Container", it.container]);
+    if (r.from_tx) fields.push(["From Texas", TX[r.from_tx.trim().toUpperCase()] || r.from_tx]);
+    if (r.set_id) fields.push(["Set", `${r.set_id} — part ${r.part_n || "?"} of ${r.part_total || "?"}`]);
+    if (r.packed_by || r.packed_date) fields.push(["Packed", [r.packed_by, r.packed_date].filter(Boolean).join(", ")]);
+    const hand = [r.contents, r.notes].filter(x => x && x.trim()).join("\n");
+    const uc = keep ? keep.uc : (r.unprinted_contents || ""), un = keep ? keep.un : ([r.unprinted_notes, r.private_notes].filter(x => x && x.trim()).join("\n"));
+    const hist = it ? it.history : [], nPhotos = it ? it.photos.length : 0, w1 = it ? it.w1 : "";
+    out.innerHTML = `
+      <div class="label">
+        ${labelBlock(id, !it || it.unknown ? null : st)}
+        <div class="body">
+          ${!it || it.unknown ? `<p class="note warn">This number isn't in the inventory on this phone. You can still record it; sync to refresh the inventory.</p>` : ""}
+          <div class="final">Final location<b>${dest ? disp(dest) + (floorOf(dest) && floorOf(dest) !== floorOf(st) ? ` <span style="font-size:14px;color:#555">(${floorOf(dest)})</span>` : "") : "— written on the label by hand; not recorded yet"}</b></div>
+          ${r.set_id ? `<div class="setband">Set of ${r.part_total || "?"} — do not separate — part ${r.part_n || "?"}</div>` : ""}
+          ${hand ? `<div class="hand">${esc(hand)}</div>` : ""}
+          ${fields.length ? `<dl>${fields.map(([k, v]) => `<dt>${k}</dt><dd>${esc(v)}</dd>`).join("")}</dl>` : ""}
+          <div class="edit">
+            <div class="elabel">Going in the pod?</div>
+            <div class="chips">${Object.keys(W1_WORDS).map(k => `<button class="quiet ${w1 === k ? "on" : ""}" data-w1="${k}">${W1_WORDS[k]}</button>`).join("")}</div>
+            ${!(base.dest || "").trim() ? `<label class="field">Final location written on this label<select id="ed-dest"><option value="">— choose —</option>${DEST_CHOICES.map(d => `<option value="${d}" ${d === dest ? "selected" : ""}>${esc(disp(d))}</option>`).join("")}</select></label>` : ""}
+            <label class="field">What's inside — kept off the label<textarea id="ed-uc" rows="3">${esc(uc)}</textarea></label>
+            <label class="field">Notes — kept off the label<textarea id="ed-un" rows="2">${esc(un)}</textarea></label>
+            <div class="row" style="margin-top:10px"><button class="save" id="ed-save">Save details</button><button class="quiet" id="ed-photo">Take a photo</button></div>
+            <div class="thumbs">${(thumbs[id] || []).map(u => `<img src="${u}" alt="">`).join("")}</div>
+            <div class="pcount">${nPhotos ? `${nPhotos} photo${nPhotos === 1 ? "" : "s"} recorded for this one` : "No photos yet"}</div>
+          </div>
+          ${hist.length ? `<div class="sight">So far: <ul>${hist.map(s => `<li>${cpWords[s.type] || s.type} — ${esc(whenText(s.ts))}${s.container ? " · " + esc(s.container) : ""}${s.location ? " · " + esc(disp(s.location)) : ""}${s.who ? " · " + esc(s.who) : ""}</li>`).join("")}</ul></div>` : ""}
+          <div class="chips">${CHECKPOINTS.map(c => `<button class="quiet" data-cp="${c}">${cpWords[c]}</button>`).join("")}</div>
+          ${it && it.last ? `<div class="chips"><button class="quiet" id="ed-undo">Undo “${cpWords[it.last.type]}” — it was a mistake</button></div>` : ""}
+        </div>
+      </div>`;
+    const keepNow = () => ({ uc: $("ed-uc").value, un: $("ed-un").value });
+    ["ed-uc", "ed-un"].forEach(k => $(k).oninput = () => { dirty = true; });
+    out.querySelectorAll("[data-w1]").forEach(b => b.onclick = async () => { const k = keepNow(), d = dirty; await record(mkEvent(cfg.who, id, "EDIT", { field: "w1", value: w1 === b.dataset.w1 ? "" : b.dataset.w1 })); show(id, d ? k : null); });
+    if ($("ed-dest")) $("ed-dest").onchange = async e => { const k = keepNow(), d = dirty; await record(mkEvent(cfg.who, id, "EDIT", { field: "dest", value: e.target.value })); show(id, d ? k : null); setStatus("Final location recorded.", "ok"); };
+    $("ed-save").onclick = async () => {
+      const k = keepNow(); let n = 0;
+      if (k.uc.trim() !== (r.unprinted_contents || "").trim()) { await record(mkEvent(cfg.who, id, "EDIT", { field: "unprinted_contents", value: k.uc.trim() })); n++; }
+      if (k.un.trim() !== [r.unprinted_notes, r.private_notes].filter(x => x && x.trim()).join("\n").trim()) { await record(mkEvent(cfg.who, id, "EDIT", { field: "unprinted_notes", value: k.un.trim() })); n++; }
+      show(id); setStatus(n ? "Details saved." : "Nothing had changed.", "ok");
+    };
+    $("ed-photo").onclick = () => { photoFor = id; $("cam").click(); };
+    out.querySelectorAll("[data-cp]").forEach(b => b.onclick = () => logCheckpoint(id, b.dataset.cp, keepNow()));
+    if ($("ed-undo")) $("ed-undo").onclick = async () => { const last = lastCheckpointOf(id); if (!last || !confirm(`Undo “${cpWords[last.type]}” for ${CLASSWORD[id[0]]} ${id.slice(1)}?`)) return;
+      const k = keepNow(), d = dirty; await record(mkEvent(cfg.who, id, "UNDO", { value: last.event_id })); show(id, d ? k : null); setStatus("Undone.", "ok"); };
+  }
+
+  async function logCheckpoint(id, cp, keep) {
+    const it = state.items[id], extra = {};
+    if (cp === "LOADED") { const c = prompt("Which container? (POD1, TRUCK …)", (run && run.container) || lastContainer() || "POD1"); if (c === null) return; extra.container = c.trim().toUpperCase(); extra.wave = (run && run.wave) || ""; }
+    if (cp === "RECEIVED") extra.location = it ? stageOf(it.row) : "";
+    if (cp === "PLACED") extra.location = it ? ((it.row.dest || "").trim().toUpperCase() || stageOf(it.row)) : "";
+    const d = dirty; await record(mkEvent(cfg.who, id, cp, extra)); show(id, d ? keep : null);
+    setStatus(`${CLASSWORD[id[0]]} ${id.slice(1)}: ${cpWords[cp].toLowerCase()} recorded.`, "ok");
+  }
+  const lastContainer = () => { const all = mergeEvents(server, local); for (let i = all.length - 1; i >= 0; i--) if (all[i].container) return all[i].container; return ""; };
+
+  // ---- photos: named here, at capture, so nobody names or sorts anything later ----
+  let photoFor = null;
+  async function shrink(file, maxEdge) {
+    if (!maxEdge || !window.createImageBitmap) return file;
+    try {
+      const bmp = await createImageBitmap(file, { imageOrientation: "from-image" }), s = Math.min(1, maxEdge / Math.max(bmp.width, bmp.height));
+      const c = document.createElement("canvas"); c.width = Math.round(bmp.width * s); c.height = Math.round(bmp.height * s);
+      c.getContext("2d").drawImage(bmp, 0, 0, c.width, c.height); if (bmp.close) bmp.close();
+      const out = await new Promise(res => c.toBlob(res, "image/jpeg", 0.86));
+      return out || file;
+    } catch (e) { return file; }
+  }
+  $("cam").onchange = async e => {
+    const f = e.target.files[0], id = photoFor; e.target.value = ""; if (!f || !id) return;
+    setStatus("Keeping the photo…");
+    try {
+      const blob = await shrink(f, cfg.photoMax), when = new Date(), name = photoName(id, when, cfg.who);
+      const ev = mkEvent(cfg.who, id, "PHOTO", { photo: name, ts: when.toISOString() });
+      await idb.putPhoto({ key: ev.event_id, ns: ns(), name, blob, event: wire(ev) });
+      photosWaiting++; (thumbs[id] = thumbs[id] || []).push(URL.createObjectURL(blob));
+      const k = $("ed-uc") ? { uc: $("ed-uc").value, un: $("ed-un").value } : null, d = dirty;
+      await record(ev); if (currentId === id) show(id, d ? k : null);
+      setStatus(`Photo kept as ${name}${cfg.url ? " — uploading" : ""}.`, "ok");
+    } catch (er) { setStatus("The photo could not be kept on this phone (storage problem). It was not recorded — take it again after freeing space.", "warn"); }
+  };
+
+  // ---- a loading / unloading run ----
+  const runWords = { LOADED: "Loading", RECEIVED: "Unloading", PLACED: "Putting in rooms" };
+  let pickedType = null;
+  $("btn-run").onclick = () => { const p = $("run-setup"); p.hidden = !p.hidden; if (!p.hidden) { $("run-container").value = lastContainer() || ""; $("containers").innerHTML = Array.from(new Set(mergeEvents(server, local).map(e => e.container).filter(Boolean))).map(c => `<option value="${esc(c)}">`).join(""); } };
+  $("run-types").querySelectorAll("button").forEach(b => b.onclick = () => { pickedType = b.dataset.type; $("run-types").querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b)); $("run-load-fields").hidden = pickedType !== "LOADED"; $("run-start").disabled = false; });
+  $("run-cancel").onclick = () => { $("run-setup").hidden = true; };
+  $("run-start").onclick = () => {
+    if (!pickedType) return;
+    const container = $("run-container").value.trim().toUpperCase();
+    if (pickedType === "LOADED" && !container) { setStatus("Name the container first — POD1, TRUCK …", "warn"); $("run-container").focus(); return; }
+    run = { type: pickedType, container: pickedType === "LOADED" ? container : "", wave: pickedType === "LOADED" ? $("run-wave").value : "", count: 0 };
+    store.set("lot26.run", run); $("run-setup").hidden = true; currentId = null; $("result").innerHTML = ""; recompute(); beepInit(); if (!scanning) startScan();
+  };
+  function endRun() { run = null; store.set("lot26.run", null); $("hit").hidden = true; if (scanning) stopScan(); renderRun(); renderDayLists(); }
+  $("run-end").onclick = () => { const n = run ? run.count : 0; endRun(); setStatus(`Finished. ${n} recorded in that session.`, "ok"); syncSoon(); };
+  function renderRun() {
+    $("runbar").hidden = !run; $("btn-run").hidden = !!run; if (!run) return;
+    $("run-what").innerHTML = `${runWords[run.type]}${run.container ? " → " + esc(run.container) : ""}${run.wave ? " · " + run.wave.replace(/^W/, "Wave ") : ""}<small>${run.count} recorded this session${scanning ? "" : " — tap “Scan a label” to continue"}</small>`;
+  }
+  let lastRunHit = "", lastRunAt = 0;
+  async function handleRunScan(id) {
+    const now = Date.now(); if (id === lastRunHit && now - lastRunAt < 8000) return; lastRunHit = id; lastRunAt = now;
+    const it = state.items[id], v = runVerdict(it, run); let ev = null;
+    if (v.log) {
+      const extra = run.type === "LOADED" ? { container: run.container, wave: run.wave } : { location: it ? (run.type === "PLACED" ? ((it.row.dest || "").trim().toUpperCase() || stageOf(it.row)) : stageOf(it.row)) : "" };
+      run.count++; store.set("lot26.run", run); ev = await record(mkEvent(cfg.who, id, run.type, extra));
+    }
+    const unknown = !it || it.unknown, tone = unknown && v.tone === "ok" ? "warn" : v.tone;
+    const h = $("hit"); h.hidden = false; h.className = tone;
+    h.innerHTML = `${labelBlock(id, it && !it.unknown ? stageOf(it.row) : null)}<div class="verdict"><span>${esc(v.text)}${unknown ? " — not in the inventory on this phone" : ""}</span>${ev ? `<button class="quiet" id="hit-undo">Undo</button>` : ""}<button class="quiet" id="hit-open">Open</button></div>`;
+    if (ev) $("hit-undo").onclick = async () => { await record(mkEvent(cfg.who, id, "UNDO", { value: ev.event_id })); run.count = Math.max(0, run.count - 1); store.set("lot26.run", run); renderRun(); h.className = "dup"; h.querySelector(".verdict span").textContent = "Undone — not recorded"; $("hit-undo").remove(); lastRunHit = ""; };
+    $("hit-open").onclick = () => { show(id); $("result").scrollIntoView({ block: "start", behavior: "smooth" }); };
+    beep(tone); if (navigator.vibrate) navigator.vibrate(tone === "ok" ? 60 : tone === "dup" ? [40, 60, 40] : [120, 60, 120]);
+  }
+  let audio = null;
+  function beepInit() { try { audio = audio || new (window.AudioContext || window.webkitAudioContext)(); if (audio.state === "suspended") audio.resume(); } catch (e) {} }
+  function beep(tone) { if (!audio) return; try { const o = audio.createOscillator(), g = audio.createGain(); o.connect(g); g.connect(audio.destination);
+    o.frequency.value = tone === "ok" ? 1040 : tone === "dup" ? 420 : 640; g.gain.value = 0.18; const t = audio.currentTime, len = tone === "ok" ? 0.09 : 0.28; o.start(t); g.gain.setValueAtTime(0.18, t + len - 0.03); g.gain.linearRampToValueAtTime(0, t + len); o.stop(t + len); } catch (e) {} }
+
+  // ---- manual entry ----
+  function lookup(text) { const id = parseId(text); if (!id) { setStatus("Enter a number like 052, or F013 / E002.", "warn"); return; } $("manual").value = ""; if (run) handleRunScan(id); else show(id); }
+  $("btn-go").onclick = () => lookup($("manual").value);
+  $("manual").addEventListener("keydown", e => { if (e.key === "Enter") lookup($("manual").value); });
+
+  // ---- camera scanning ----
+  let stream = null, scanning = false, lastHit = "", lastAt = 0, wake = null;
+  const video = $("video"), canvas = document.createElement("canvas"), ctx = canvas.getContext("2d", { willReadFrequently: true });
+  $("btn-scan").onclick = () => { if (scanning) stopScan(); else { beepInit(); startScan(); } };
+  function setStatus(msg, kind) { const el = $("scan-status"); el.textContent = msg; el.className = "status " + (kind || ""); }
+  async function startScan() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { setStatus("The camera isn't available in this viewer. Open this page in Chrome, or type the number below.", "warn"); return; }
+    try { stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 960 } }, audio: false }); }
+    catch (e) { setStatus("Camera not available here (" + (e.name || "blocked") + "). Open this page in Chrome, or type the number below.", "warn"); return; }
+    video.srcObject = stream; await video.play();
+    $("scan").classList.add("on"); $("btn-scan").textContent = "Stop scanning"; scanning = true; renderRun();
+    setStatus(run ? "Point at each label in turn. Listen for the beep." : "Point at a label. Hold steady on the QR.");
+    try { if (navigator.wakeLock) wake = await navigator.wakeLock.request("screen"); } catch (e) {}
+    requestAnimationFrame(tick);
+  }
+  function stopScan() {
+    scanning = false; $("scan").classList.remove("on"); $("btn-scan").textContent = "Scan a label";
+    if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+    if (wake) { try { wake.release(); } catch (e) {} wake = null; } renderRun();
+  }
+  function tick() {
+    if (!scanning) return;
+    if (video.readyState === video.HAVE_ENOUGH_DATA) {
+      const w = video.videoWidth, h = video.videoHeight;
+      if (w && h) {
+        const s = Math.min(1, 800 / w); canvas.width = Math.round(w * s); canvas.height = Math.round(h * s);
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const code = jsQR(img.data, img.width, img.height, { inversionAttempts: "dontInvert" });
+        if (code && code.data) {
+          const id = parseId(code.data), now = Date.now();
+          if (id && run) handleRunScan(id);
+          else if (id && (id !== lastHit || now - lastAt > 2500)) { lastHit = id; lastAt = now; if (navigator.vibrate) navigator.vibrate(40); show(id); setStatus(`Read ${CLASSWORD[id[0]]} ${id.slice(1)}. Still scanning — point at the next label or tap Stop.`, "ok"); }
+        }
+      }
+    }
+    setTimeout(() => requestAnimationFrame(tick), 120);
+  }
+
+  // ---- fallbacks when sync is not available ----
+  $("j-share").onclick = async () => {
+    const stamp = photoName("B000", new Date(), cfg.who).slice(5, -4), file = new File([eventsCsv(local.map(wire))], `lot26_events_${stamp}.csv`, { type: "text/csv" });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) { try { await navigator.share({ files: [file], title: "Lot 26 entries" }); } catch (e) {} }
+    else { const a = document.createElement("a"); a.href = URL.createObjectURL(file); a.download = file.name; a.click(); setStatus("Saved to this phone's Downloads as " + file.name, "ok"); }
+  };
+  $("j-copy").onclick = async () => { try { await navigator.clipboard.writeText(eventsCsv(local.map(wire))); setStatus("Copied.", "ok"); } catch (e) { setStatus("Copy was blocked here — use “Share as a file”.", "warn"); } };
+  $("j-photos").onclick = async () => { const recs = await idb.photos(ns()); if (!recs.length) { setStatus("No photos are waiting.", "ok"); return; }
+    for (const r of recs) { const a = document.createElement("a"); a.href = URL.createObjectURL(r.blob); a.download = r.name; a.click(); await new Promise(z => setTimeout(z, 400)); }
+    setStatus(`${recs.length} photo${recs.length === 1 ? "" : "s"} saved to this phone's Downloads, already named. They stay queued for upload too.`, "ok"); };
+
+  // ---- start ----
+  (async function boot() {
+    const hadLink = applySetupLink();
+    const okDb = await idb.open();
+    await loadNamespace();
+    if (!cfg.practice) { const old = store.get("lot26.sightings") || [], have = new Set(local.map(e => e.event_id)); let added = 0;
+      for (const s of old) { const ev = fromV1Sighting(s); if (s.id && s.checkpoint && !have.has(ev.event_id)) { ev.synced = false; local.push(ev); added++; } } if (added) await persistLocal(); }
+    fillSettings(); recompute();
+    if (!okDb) setStatus("This browser won't keep data between visits (private window?). Use normal Chrome.", "warn");
+    else if (hadLink) { $("d-settings").open = true; setStatus("Sync is set up on this phone. Enter your name below, then tap “Save and test”.", "ok"); }
+    else if (!cfg.who) setStatus("Tip: enter your name under “Settings and sync”, so records show who made them.");
+    if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+    if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").then(() => navigator.serviceWorker.ready).then(r => r.active && r.active.postMessage({ keep: location.pathname })).catch(() => {});
+    syncSoon(300);
+  })();
+})();
+</script>
+</body>
+</html>
