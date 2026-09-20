@@ -221,6 +221,7 @@
 
   // ---- core: events -> state. No DOM in this block (it is unit-tested on its own). ----
   const CHECKPOINTS = ["PACKED", "LOADED", "RECEIVED", "PLACED"];
+  const CONTAINER_TYPES = ["DEPARTED", "DELIVERED"];            // about a whole pod or truck; they carry a container name and no item id
   const EV_COLS = ["event_id", "ts", "who", "id", "type", "field", "value", "container", "wave", "location", "photo", "note"];
   const W1_WORDS = { MUST: "Must go", OK: "Can go if there's room", NO: "Not in the pod" };
 
@@ -261,11 +262,14 @@
   // inventory rows + events -> what is true about every item right now.
   function deriveState(rows, events) {
     const undone = new Set(events.filter(e => e.type === "UNDO").map(e => e.value));
-    const items = {};
+    const items = {}, containers = {};
     const get = id => items[id] || (items[id] = { id, base: null, edits: {}, history: [], photos: [], unknown: true });
+    const box = name => containers[name] || (containers[name] = { name, events: [], wave: "", loaded: 0, checkedIn: 0 });
     for (const r of (rows || [])) { const id = (r.id || "").trim().toUpperCase(); if (id) { const it = get(id); it.base = r; it.unknown = false; } }
     for (const e of events) {
       if (e.type === "UNDO" || undone.has(e.event_id)) continue;
+      if (CONTAINER_TYPES.includes(e.type)) { if (e.container) box(e.container).events.push(e); continue; }
+      if (!(e.id || "").trim()) continue;
       const it = get((e.id || "").trim().toUpperCase());
       if (e.type === "EDIT") it.edits[e.field] = e.value;               // events are oldest-first, so the last write wins
       else if (e.type === "PHOTO") it.photos.push(e.photo);
@@ -281,8 +285,14 @@
       it.received = cps.some(e => e.type === "RECEIVED" || e.type === "PLACED");
       if (it.loaded) { if (it.loaded.wave) it.row.wave = it.loaded.wave; it.container = it.loaded.container || ""; }
       it.w1 = (it.row.w1 || "").trim().toUpperCase();
+      // Where is a loaded item? Only a container event made AFTER this item went in counts for it (a container name can be reused for a later trip).
+      const c = it.loaded && it.container ? box(it.container) : null, after = t => c && c.events.filter(e => e.type === t && e.ts > it.loaded.ts).pop();
+      it.departed = after("DEPARTED") || null; it.delivered = after("DELIVERED") || null;
+      it.phase = !it.loaded ? "" : it.arrived ? "IN" : it.delivered ? "DELIVERED" : it.departed ? "TRANSIT" : "ONBOARD";
+      if (c) { c.loaded++; if (it.arrived) c.checkedIn++; if (it.loaded.wave) c.wave = it.loaded.wave; }
     }
-    return { items, undone };
+    for (const c of Object.values(containers)) c.last = c.events.length ? c.events[c.events.length - 1] : null;
+    return { items, undone, containers };
   }
 
   // The three lists that matter on a loading or unloading day.
@@ -295,6 +305,8 @@
     for (const i of transit) (byContainer[i.container || "(no container noted)"] = byContainer[i.container || "(no container noted)"] || []).push(i);
     return {
       counts,
+      onboard: transit.filter(i => i.phase === "ONBOARD"), onTheWay: transit.filter(i => i.phase === "TRANSIT"), delivered: transit.filter(i => i.phase === "DELIVERED"),
+      containers: Object.values(state.containers || {}).filter(c => c.loaded || c.events.length).sort((a, b) => (a.name < b.name ? -1 : 1)),
       mustNotLoaded: all.filter(i => i.w1 === "MUST" && !i.loaded),
       canGo: all.filter(i => i.w1 === "OK" && !i.loaded),
       inTransit: transit, byContainer
@@ -336,7 +348,7 @@
     field: "", value: "", container: s.container || "", wave: "", location: s.location || "", photo: s.photo || "", note: s.note || "" });
 
   // ---- storage: small things in localStorage (shared with v1), events and photos in IndexedDB ----
-  const APP_VERSION = "Box app 2.1 (2026-09-20)";
+  const APP_VERSION = "Box app 2.2 (2026-09-20)";
   const $ = id => document.getElementById(id);
   const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const store = { get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } },
@@ -361,7 +373,9 @@
   let local = [], server = [], state = { items: {}, undone: new Set() }, lists = null;
   let run = store.get("lot26.run") || null;                  // {type, container, wave, count}
   let currentId = null, dirty = false, photosWaiting = 0;
-  const sync = { busy: false, again: false, lastOk: 0, lastTry: 0, lastPull: 0, error: "", code: "" };
+  const sync = { busy: false, again: false, lastOk: 0, lastTry: 0, lastPull: 0, error: "", code: "", server: store.get("lot26.server") || "" };
+  const noteServer = v => { if (v && v !== sync.server) { sync.server = v; store.set("lot26.server", v); } };
+  const serverTooOld = () => { const m = /dropbox (\d+)\.(\d+)/.exec(sync.server || ""); return !!m && (+m[1] < 1 || (+m[1] === 1 && +m[2] < 1)); };
   const thumbs = {};                                          // id -> [objectURL] for photos taken this session
   const ns = () => (cfg.practice ? "test" : "live");
 
@@ -423,15 +437,41 @@
     el.innerHTML = `<div class="counts">
         <span>Items in the inventory</span><b>${c.total}</b>
         <span>Not packed or scanned yet</span><b>${c.none}</b>
-        <span>Packed</span><b>${c.PACKED}</b><span>Loaded, on the way</span><b>${lists.inTransit.length}</b>
+        <span>Packed</span><b>${c.PACKED}</b>
+        <span>Loaded, container not picked up yet</span><b>${lists.onboard.length}</b>
+        <span>On the way</span><b>${lists.onTheWay.length}</b>
+        <span>Delivered, not unloaded yet</span><b>${lists.delivered.length}</b>
         <span>Arrived</span><b>${c.RECEIVED}</b><span>In their rooms</span><b>${c.PLACED}</b>
         <span>With at least one photo</span><b>${c.photos}</b>
         ${c.unknown ? `<span>Scanned, but not in the inventory</span><b>${c.unknown}</b>` : ""}
       </div>
+      ${lists.containers.length ? `<div class="daylist"><h2>Pods and trucks</h2>${lists.containers.map(containerCard).join("")}</div>` : ""}
       ${lists.mustNotLoaded.length ? `<div class="daylist"><h2>Must go — not loaded yet (${lists.mustNotLoaded.length})</h2>${idButtons(lists.mustNotLoaded)}</div>` : ""}
       ${lists.inTransit.length ? `<div class="daylist"><h2>Loaded, not checked in (${lists.inTransit.length})</h2>${idButtons(lists.inTransit)}</div>` : ""}
       <p class="note">${APP_VERSION}</p>`;
     wireOpen(el);
+    el.querySelectorAll("[data-cmark]").forEach(b => b.onclick = () => markContainer(b.dataset.c, b.dataset.cmark));
+    el.querySelectorAll("[data-cundo]").forEach(b => b.onclick = () => undoContainer(b.dataset.c));
+  }
+  // One entry for the whole pod or truck. The item-by-item scans stay the audit record; this only says where the container is.
+  const containerWords = { DEPARTED: "picked up — on the way", DELIVERED: "delivered" };
+  function containerCard(c) {
+    const st = c.last ? `${containerWords[c.last.type]} since ${whenText(c.last.ts)}${c.last.who ? " (" + esc(c.last.who) + ")" : ""}` : "still here — not picked up yet";
+    const next = !c.last ? ["DEPARTED", `${esc(c.name)} has been picked up`] : c.last.type === "DEPARTED" ? ["DELIVERED", `${esc(c.name)} has been delivered`] : null;
+    return `<div class="panel" style="margin-top:8px"><p class="ptitle">${esc(c.name)}${c.wave ? " · " + c.wave.replace(/^W/, "Wave ") : ""}</p>
+      <p class="note" style="margin:0 0 8px;font-size:15px">${c.loaded} loaded · ${c.checkedIn} checked in at the other end · ${st}</p>
+      <div class="row">${next ? `<button data-c="${esc(c.name)}" data-cmark="${next[0]}">${next[1]}</button>` : ""}${c.last ? `<button class="quiet" data-c="${esc(c.name)}" data-cundo="1">Undo “${c.last.type === "DEPARTED" ? "picked up" : "delivered"}”</button>` : ""}</div></div>`;
+  }
+  async function markContainer(name, type) {
+    const c = state.containers[name]; if (!c) return;
+    if (serverTooOld()) { setStatus("The Drive script needs its update first (it would refuse this entry). Deploy the new Code.gs, then try again.", "warn"); return; }
+    const n = c.loaded - c.checkedIn;
+    if (!confirm(type === "DEPARTED" ? `Mark ${name} as picked up and on its way?\n\n${n} item${n === 1 ? " is" : "s are"} loaded in it.` : `Mark ${name} as delivered?\n\n${n} item${n === 1 ? "" : "s"} still to unload and check in.`)) return;
+    await record(mkEvent(cfg.who, "", type, { container: name, wave: c.wave || "" })); setStatus(`${name}: ${containerWords[type]}.`, "ok");
+  }
+  async function undoContainer(name) {
+    const c = state.containers[name]; if (!c || !c.last || !confirm(`Undo “${c.last.type === "DEPARTED" ? "picked up" : "delivered"}” for ${name}?`)) return;
+    await record(mkEvent(cfg.who, "", "UNDO", { value: c.last.event_id, container: name })); setStatus("Undone.", "ok");
   }
 
   // ---- recording ----
@@ -481,6 +521,7 @@
         await persistLocal(); renderPill();
       }
       const s = (forcePull === true || Date.now() - sync.lastPull > 45000) ? await api("state") : null;
+      if (s) noteServer(s.version);
       if (s && mode === ns()) {
         sync.lastPull = Date.now();
         if (s.inventory_csv) { const rows = Papa.parse(s.inventory_csv, { header: true, skipEmptyLines: true }).data;
@@ -514,7 +555,7 @@
     recompute();
     if (!cfg.url || !cfg.token) { setStatus("Saved. Add the sync address and passphrase to turn on sync.", "ok"); return; }
     setStatus("Testing the connection…");
-    try { const r = await api("ping"); setStatus(`Connected to ${r.version}${cfg.practice ? " — practice mode" : ""}.`, "ok"); if (cfg.who) $("d-settings").open = false; sync.error = ""; sync.code = ""; sync.lastPull = 0; syncSoon(); }
+    try { const r = await api("ping"); noteServer(r.version); setStatus(`Connected to ${r.version}${cfg.practice ? " — practice mode" : ""}.`, "ok"); if (cfg.who) $("d-settings").open = false; sync.error = ""; sync.code = ""; sync.lastPull = 0; syncSoon(); }
     catch (e) { sync.code = e.code || ""; sync.error = e.message; renderPill(); setStatus("Could not connect: " + e.message, "warn"); }
   }
   $("cfg-save").onclick = saveSettings;
@@ -552,6 +593,7 @@
   }
   const whenText = ts => { const d = new Date(ts); return isNaN(d) ? ts : d.toLocaleString([], { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }); };
   const cpWords = { PACKED: "Packed", LOADED: "Loaded", RECEIVED: "Arrived", PLACED: "Placed in room", SEEN: "Seen" };
+  const phaseWords = { ONBOARD: "loaded, not picked up yet", TRANSIT: "on the way", DELIVERED: "delivered, not unloaded yet" };
 
   function show(id, keep) {
     currentId = id; dirty = !!keep;
@@ -561,7 +603,7 @@
     const st = stageOf(r), dest = (r.dest || "").trim().toUpperCase();
     const fields = [];
     if (r.wave) fields.push(["Wave", r.wave.replace(/^W/i, "Wave ")]);
-    if (it && it.container) fields.push(["Container", it.container]);
+    if (it && it.container) fields.push(["Container", it.container + (it.phase && it.phase !== "IN" ? " — " + phaseWords[it.phase] : "")]);
     if (r.from_tx) fields.push(["From Texas", TX[r.from_tx.trim().toUpperCase()] || r.from_tx]);
     if (r.set_id) fields.push(["Set", `${r.set_id} — part ${r.part_n || "?"} of ${r.part_total || "?"}`]);
     if (r.packed_by || r.packed_date) fields.push(["Packed", [r.packed_by, r.packed_date].filter(Boolean).join(", ")]);
@@ -658,7 +700,8 @@
     store.set("lot26.run", run); $("run-setup").hidden = true; currentId = null; $("result").innerHTML = ""; recompute(); beepInit(); if (!scanning) startScan();
   };
   function endRun() { run = null; store.set("lot26.run", null); $("hit").hidden = true; if (scanning) stopScan(); renderRun(); renderDayLists(); }
-  $("run-end").onclick = () => { const n = run ? run.count : 0; endRun(); setStatus(`Finished. ${n} recorded in that session.`, "ok"); syncSoon(); };
+  $("run-end").onclick = () => { const n = run ? run.count : 0, was = run; endRun();
+    setStatus(`Finished. ${n} recorded in that session.` + (was && was.type === "LOADED" ? ` When ${was.container} is picked up, mark it under “Where everything is”.` : ""), "ok"); syncSoon(); };
   function renderRun() {
     $("runbar").hidden = !run; $("btn-run").hidden = !!run; if (!run) return;
     $("run-what").innerHTML = `${runWords[run.type]}${run.container ? " → " + esc(run.container) : ""}${run.wave ? " · " + run.wave.replace(/^W/, "Wave ") : ""}<small>${run.count} recorded this session${scanning ? "" : " — tap “Scan a label” to continue"}</small>`;
