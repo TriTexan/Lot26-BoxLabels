@@ -116,11 +116,23 @@
   #alarm .alarm-box { width: 100%; max-width: 520px; background: #fff; color: #111; border-radius: 16px; padding: 20px; border: 4px solid #b3142c; text-align: center; font-size: 17px; line-height: 1.4; }
   #alarm .alarm-id { font-size: clamp(34px, 11vw, 52px); font-weight: 800; line-height: 1; } #alarm .alarm-head { font-size: 22px; font-weight: 800; color: #8f0c20; margin-top: 8px; }
   #alarm .alarm-when { font-size: 18px; color: #333; margin-top: 2px; } #alarm p { margin: 12px 0 0; } #alarm button { width: 100%; margin-top: 16px; background: #111; color: #fff; font-size: 19px; padding: 16px; }
+  #main-actions button.on { background: var(--btn); color: var(--btn-ink); border-color: var(--btn); }
+  #runbar button { margin-left: 6px; } #result { scroll-margin-top: 52px; }
+  .thumbs .ptile { width: 84px; height: 84px; padding: 0; overflow: hidden; border-radius: 8px; border: 1px solid #ccc; background: #f3f3f3; color: #333; font-size: 13px; font-weight: 600; }
+  .thumbs .ptile img { width: 100%; height: 100%; object-fit: cover; display: block; border: 0; border-radius: 0; } .thumbs .ptile small { display: block; font-weight: 400; color: #666; }
+  #viewer { position: fixed; inset: 0; z-index: 25; background: #111; color: #fff; display: flex; flex-direction: column; }
+  #viewer .viewer-bar { display: flex; align-items: center; gap: 10px; padding: 10px 12px; } #viewer .viewer-bar span { flex: 1 1 auto; font-size: 15px; } #viewer .viewer-bar button { flex: 0 0 auto; }
+  #viewer .viewer-img { flex: 1 1 auto; overflow: auto; display: flex; align-items: center; justify-content: center; } #viewer img { max-width: 100%; max-height: 100%; touch-action: pinch-zoom; } #viewer p { color: #ddd; padding: 20px; text-align: center; }
   .sub.warn { color: var(--warn); }
 </style>
 </head>
 <body>
 <div id="practice" hidden>Practice mode — nothing you do here counts</div>
+<div id="viewer" hidden role="dialog" aria-modal="true">
+  <div class="viewer-bar"><span id="viewer-cap"></span><button id="viewer-close" class="quiet">Close</button></div>
+  <div class="viewer-img"><img id="viewer-img" alt=""><p id="viewer-msg"></p></div>
+  <div class="viewer-bar"><button id="viewer-del" class="quiet">Remove this photo</button></div>
+</div>
 <div id="alarm" hidden role="alertdialog" aria-modal="true">
   <div class="alarm-box">
     <div class="alarm-id" id="alarm-id"></div>
@@ -139,11 +151,11 @@
   <p class="sub" id="inv-status">No inventory yet.</p>
   <button id="ready-strip" class="quiet" hidden style="width:100%;margin:2px 0 6px"></button>
 
-  <div id="runbar" hidden><div class="what" id="run-what"></div><button id="run-end">Finish</button></div>
+  <div id="runbar" hidden><div class="what" id="run-what"></div><button id="run-pause">Pause camera</button><button id="run-end">Finish</button></div>
 
   <div class="row" id="main-actions">
-    <button id="btn-scan">Scan a label</button>
-    <button id="btn-run" class="quiet">Scan many: seal · load · unload</button>
+    <button id="btn-scan" class="quiet">Scan Single Label</button>
+    <button id="btn-run" class="quiet">Scan Multiple: Seal · Load · Unload</button>
   </div>
 
   <div id="run-setup" class="panel" hidden>
@@ -155,12 +167,14 @@
       <button class="quiet" data-type="PLACED">Putting in rooms</button>
     </div>
     <div id="run-load-fields" hidden>
-      <label class="field">Container it's going into<input id="run-container" type="text" list="containers" placeholder="POD1" autocomplete="off" autocapitalize="characters"></label>
+      <div class="elabel" id="run-known-label" hidden style="font-size:14px;color:var(--muted);margin-top:10px">Already in use — tap to pick</div>
+      <div class="chips" id="run-known"></div>
+      <label class="field">Container it's going into (a new name starts a new container)<input id="run-container" type="text" list="containers" placeholder="POD1" autocomplete="off" autocapitalize="characters"></label>
       <datalist id="containers"></datalist>
-      <label class="field">Wave<select id="run-wave"><option value="W1">Wave 1 — the pod</option><option value="W2">Wave 2 — the main move</option><option value="W3">Wave 3 — after the sale</option><option value="">Not decided</option></select></label>
+      <label class="field">Wave<select id="run-wave"></select></label>
     </div>
     <div class="row" style="margin-top:12px"><button id="run-start" disabled>Start scanning</button><button id="run-cancel" class="quiet">Cancel</button></div>
-    <p class="note">Every label you scan is recorded by itself — no tapping per box. A second scan of the same box is ignored.</p>
+    <p class="note">Every label you scan is recorded by itself — no tapping per box. A label scanned a second time stops the session until someone answers the alarm.</p>
   </div>
 
   <div class="scan" id="scan"><video id="video" playsinline muted></video><div class="frame"></div></div>
@@ -187,6 +201,10 @@
     <label class="field">Passphrase<input id="cfg-token" type="text" autocomplete="off" autocapitalize="none" spellcheck="false"></label>
     <label class="field">Photo size<select id="cfg-photo"><option value="2560">Standard — sharp, quick to upload</option><option value="0">Full size — slower on cellular</option></select></label>
     <label class="field" style="display:flex;gap:10px;align-items:center;color:var(--ink);font-size:16px"><input id="cfg-practice" type="checkbox" style="width:22px;height:22px;flex:0 0 auto;margin:0"> Practice mode — record to a separate practice file</label>
+    <div class="elabel" style="font-size:14px;color:var(--muted);margin-top:14px">What you call each wave (shared by both phones; changes no record)</div>
+    <label class="field">Wave 1<input id="name-W1" type="text" maxlength="40" autocomplete="off"></label>
+    <label class="field">Wave 2<input id="name-W2" type="text" maxlength="40" autocomplete="off"></label>
+    <label class="field">Wave 3<input id="name-W3" type="text" maxlength="40" autocomplete="off"></label>
     <div class="row" style="margin-top:12px"><button id="cfg-save">Save and test</button><button id="cfg-sync" class="quiet">Sync now</button></div>
     <div class="row" style="margin-top:8px"><button id="cfg-link" class="quiet">Copy setup link for another phone</button></div>
     <p class="note" id="sync-detail"></p>
@@ -245,6 +263,10 @@
   const isSealed = it => !!(it && it.last && (it.last.type === "SEALED" || it.last.type === "PACKED"));
   const CONTAINER_TYPES = ["DEPARTED", "DELIVERED"];            // about a whole pod or truck; they carry a container name and no item id
   const EV_COLS = ["event_id", "ts", "who", "id", "type", "field", "value", "container", "wave", "location", "photo", "note"];
+  // Waves are stable codes in the data (W1, W2, W3). What people CALL them is a display name: changeable at any time, changing no record.
+  const WAVE_DEFAULTS = { W1: "the Pre-Pod", W2: "the main move", W3: "after the sale" };
+  const waveShort = code => (code || "").replace(/^W/i, "Wave ");
+  const waveFull = (code, names) => { const v = (names || {})["wave:" + code], n = (v != null ? v : (WAVE_DEFAULTS[code] || "")).trim(); return waveShort(code) + (n ? " — " + n : ""); };
   const W1_WORDS = { MUST: "Must go", OK: "Can go if there's room", NO: "Not in the pod" };
 
   function uuid() {
@@ -284,17 +306,18 @@
   // inventory rows + events -> what is true about every item right now.
   function deriveState(rows, events) {
     const undone = new Set(events.filter(e => e.type === "UNDO").map(e => e.value));
-    const items = {}, containers = {};
+    const items = {}, containers = {}, names = {};
     const get = id => items[id] || (items[id] = { id, base: null, edits: {}, history: [], photos: [], unknown: true });
     const box = name => containers[name] || (containers[name] = { name, events: [], wave: "", loaded: 0, checkedIn: 0 });
     for (const r of (rows || [])) { const id = (r.id || "").trim().toUpperCase(); if (id) { const it = get(id); it.base = r; it.unknown = false; } }
     for (const e of events) {
       if (e.type === "UNDO" || undone.has(e.event_id)) continue;
+      if (e.type === "NAME") { names[e.field] = e.value || ""; continue; }                // last one wins; events are oldest-first
       if (CONTAINER_TYPES.includes(e.type)) { if (e.container) box(e.container).events.push(e); continue; }
       if (!(e.id || "").trim()) continue;
       const it = get((e.id || "").trim().toUpperCase());
       if (e.type === "EDIT") it.edits[e.field] = e.value;               // events are oldest-first, so the last write wins
-      else if (e.type === "PHOTO") it.photos.push(e.photo);
+      else if (e.type === "PHOTO") it.photos.push({ name: e.photo, event_id: e.event_id, ts: e.ts, who: e.who || "" });
       else if (CHECKPOINTS.includes(e.type) || e.type === "SEEN") it.history.push(e);
     }
     for (const it of Object.values(items)) {
@@ -314,7 +337,7 @@
       if (c) { c.loaded++; if (it.arrived) c.checkedIn++; if (it.loaded.wave) c.wave = it.loaded.wave; }
     }
     for (const c of Object.values(containers)) c.last = c.events.length ? c.events[c.events.length - 1] : null;
-    return { items, undone, containers };
+    return { items, undone, containers, names };
   }
 
   // The three lists that matter on a loading or unloading day.
@@ -391,7 +414,7 @@
     field: "", value: "", container: s.container || "", wave: "", location: s.location || "", photo: s.photo || "", note: s.note || "" });
 
   // ---- storage: small things in localStorage (shared with v1), events and photos in IndexedDB ----
-  const APP_VERSION = "Box app 2.6 (2026-09-20)";
+  const APP_VERSION = "Box app 2.8 (2026-09-21)";
   const $ = id => document.getElementById(id);
   const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const store = { get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } },
@@ -399,15 +422,27 @@
   const idb = {
     db: null,
     open() { return new Promise(res => { if (!window.indexedDB) return res(false);
-      const rq = indexedDB.open("lot26", 1);
-      rq.onupgradeneeded = () => { const d = rq.result; if (!d.objectStoreNames.contains("kv")) d.createObjectStore("kv"); if (!d.objectStoreNames.contains("photos")) d.createObjectStore("photos", { keyPath: "key" }); };
-      rq.onsuccess = () => { idb.db = rq.result; res(true); }; rq.onerror = () => res(false); rq.onblocked = () => res(false); }); },
+      const rq = indexedDB.open("lot26", 2);
+      rq.onupgradeneeded = () => { const d = rq.result; if (!d.objectStoreNames.contains("kv")) d.createObjectStore("kv"); if (!d.objectStoreNames.contains("photos")) d.createObjectStore("photos", { keyPath: "key" }); if (!d.objectStoreNames.contains("thumbs")) d.createObjectStore("thumbs"); };
+      let waited = false;
+      rq.onsuccess = () => { idb.db = rq.result;
+        // a LATER version of this app opening in another tab must never be held up by this one: let go, then reload into the new version
+        idb.db.onversionchange = () => { try { idb.db.close(); } catch (e) {} idb.db = null; setStatus("This app was just updated in another tab — reloading this one.", "warn"); setTimeout(() => location.reload(), document.hidden ? 0 : 1500); };
+        if (waited) setStatus("The older copy is closed — carrying on.", "ok"); res(true); };
+      rq.onerror = () => res(false);
+      // An older copy of the app open elsewhere holds the storage. Do NOT start without it (records made meanwhile could overwrite waiting ones):
+      // say so and wait — the request completes by itself the moment the other copy is closed.
+      rq.onblocked = () => { waited = true; setStatus("An older copy of this app is still open in another Chrome tab or window. Close that one — this one carries on by itself.", "warn"); $("pill").textContent = "Waiting…"; }; }); },
     tx(name, mode, fn) { return new Promise((res, rej) => { if (!idb.db) return rej(new Error("no storage"));
       const t = idb.db.transaction(name, mode); const out = fn(t.objectStore(name)); t.oncomplete = () => res(out && out.result); t.onerror = t.onabort = () => rej(t.error || new Error("storage")); }); },
     get: k => idb.tx("kv", "readonly", s => s.get(k)).catch(() => null),
     set: (k, v) => idb.tx("kv", "readwrite", s => s.put(v, k)),
     putPhoto: rec => idb.tx("photos", "readwrite", s => s.put(rec)),
     delPhoto: key => idb.tx("photos", "readwrite", s => s.delete(key)),
+    getPhoto: key => idb.tx("photos", "readonly", s => s.get(key)).catch(() => null),
+    getThumb: name => idb.tx("thumbs", "readonly", s => s.get(name)).catch(() => null),
+    putThumb: (name, blob) => idb.tx("thumbs", "readwrite", s => s.put(blob, name)).catch(() => {}),
+    delThumb: name => idb.tx("thumbs", "readwrite", s => s.delete(name)).catch(() => {}),
     photos: nsName => idb.tx("photos", "readonly", s => s.getAll()).then(a => (a || []).filter(p => p.ns === nsName)).catch(() => [])
   };
 
@@ -420,15 +455,15 @@
   const noteServer = v => { if (!v || v === sync.server) return; sync.server = v; store.set("lot26.server", v);
     let again = 0; for (const e of local) if (e.rejected) { delete e.rejected; e.synced = false; again++; } if (again) persistLocal(); };   // the script changed: entries it refused before get one more try
   const serverOlderThan = (maj, min) => { const m = /dropbox (\d+)\.(\d+)/.exec(sync.server || ""); return !!m && (+m[1] < maj || (+m[1] === maj && +m[2] < min)); };
-  const scriptNeedsUpdate = () => { setStatus("The Drive script needs its update first (it would refuse this entry). Deploy the new Code.gs, then try again.", "warn"); return true; };
-  const thumbs = {};                                          // id -> [objectURL] for photos taken this session
+  const scriptNeedsUpdate = need => { setStatus(`The Drive script answering this phone is ${(/dropbox [\d.]+/.exec(sync.server || "") || ["an older one"])[0].replace("dropbox ", "version ")}; this needs version ${need || "a newer one"}. In the script editor: paste the new Code.gs, put the passphrase back, then Deploy → Manage deployments → pencil → New version. Then “Save and test” here.`, "warn"); return true; };
+  const thumbURL = {}, fullURL = {};                          // photo name -> objectURL (small / full), filled as they are needed
   const ns = () => (cfg.practice ? "test" : "live");
 
   // ---- recompute + render ----
   function recompute() {
     state = deriveState(inventory ? inventory.rows : [], mergeEvents(server, local));
     lists = dayLists(state);
-    renderHeader(); renderPill(); renderRun(); renderDayLists(); renderWhere(); renderJournal(); renderReadyStrip();
+    renderHeader(); renderPill(); renderRun(); fillNames(); renderDayLists(); renderWhere(); renderJournal(); renderReadyStrip();
   }
   function renderHeader() {
     $("practice").hidden = !cfg.practice;
@@ -512,13 +547,13 @@
   function containerCard(c) {
     const st = c.last ? `${containerWords[c.last.type]} since ${whenText(c.last.ts)}${c.last.who ? " (" + esc(c.last.who) + ")" : ""}` : "still here — not picked up yet";
     const next = !c.last ? ["DEPARTED", `${esc(c.name)} has been picked up`] : c.last.type === "DEPARTED" ? ["DELIVERED", `${esc(c.name)} has been delivered`] : null;
-    return `<div class="panel" style="margin-top:8px"><p class="ptitle">${esc(c.name)}${c.wave ? " · " + c.wave.replace(/^W/, "Wave ") : ""}</p>
+    return `<div class="panel" style="margin-top:8px"><p class="ptitle">${esc(c.name)}${c.wave ? " · " + esc(waveFull(c.wave, state.names)) : ""}</p>
       <p class="note" style="margin:0 0 8px;font-size:15px">${c.loaded} loaded · ${c.checkedIn} checked in at the other end · ${st}</p>
       <div class="row">${next ? `<button data-c="${esc(c.name)}" data-cmark="${next[0]}">${next[1]}</button>` : ""}${c.last ? `<button class="quiet" data-c="${esc(c.name)}" data-cundo="1">Undo “${c.last.type === "DEPARTED" ? "picked up" : "delivered"}”</button>` : ""}</div></div>`;
   }
   async function markContainer(name, type) {
     const c = state.containers[name]; if (!c) return;
-    if (serverOlderThan(1, 1) && scriptNeedsUpdate()) return;
+    if (serverOlderThan(1, 1) && scriptNeedsUpdate("1.1")) return;
     const n = c.loaded - c.checkedIn;
     if (!confirm(type === "DEPARTED" ? `Mark ${name} as picked up and on its way?\n\n${n} item${n === 1 ? " is" : "s are"} loaded in it.` : `Mark ${name} as delivered?\n\n${n} item${n === 1 ? "" : "s"} still to unload and check in.`)) return;
     await record(mkEvent(cfg.who, "", type, { container: name, wave: c.wave || "" })); setStatus(`${name}: ${containerWords[type]}.`, "ok");
@@ -602,6 +637,11 @@
   document.addEventListener("visibilitychange", () => { if (document.hidden) { if (scanning) stopScan(); } else syncSoon(800); });
 
   // ---- settings ----
+  function fillNames() { ["W1", "W2", "W3"].forEach(w => { const el = $("name-" + w); el.oninput = () => { el.dataset.dirty = "1"; }; if (!el.dataset.dirty) el.value = (state.names["wave:" + w] != null ? state.names["wave:" + w] : WAVE_DEFAULTS[w]); }); }
+  async function saveNames() { let n = 0;
+    for (const w of ["W1", "W2", "W3"]) { const v = $("name-" + w).value.trim(), cur = (state.names["wave:" + w] != null ? state.names["wave:" + w] : WAVE_DEFAULTS[w]);
+      if (v !== cur) { if (serverOlderThan(1, 3)) { scriptNeedsUpdate("1.3"); return -1; } await record(mkEvent(cfg.who, "", "NAME", { field: "wave:" + w, value: v })); n++; } delete $("name-" + w).dataset.dirty; }
+    return n; }
   function fillSettings() { $("cfg-who").value = cfg.who; $("cfg-url").value = cfg.url; $("cfg-token").value = cfg.token; $("cfg-photo").value = String(cfg.photoMax); $("cfg-practice").checked = !!cfg.practice; }
   async function loadNamespace() { local = (await idb.get(ns() + ":local")) || []; server = (await idb.get(ns() + ":server")) || []; photosWaiting = (await idb.photos(ns())).length; }
   async function saveSettings() {
@@ -609,6 +649,7 @@
     cfg = { who: $("cfg-who").value.trim(), url: $("cfg-url").value.trim(), token: $("cfg-token").value.trim(), photoMax: parseInt($("cfg-photo").value, 10) || 0, practice: $("cfg-practice").checked };
     store.set("lot26.cfg", cfg);
     sync.lastPull = 0;
+    if (cfg.who && (await saveNames()) < 0) return;
     if (!cfg.who) { setStatus("Type your first name in the first box — it goes on every record and photo this phone makes. Then tap “Save and test” again.", "warn"); $("cfg-who").focus(); recompute(); return; }
     if (was !== ns()) { currentId = null; $("result").innerHTML = ""; endRun(); await loadNamespace(); }
     recompute();
@@ -661,7 +702,7 @@
     const r = it ? it.row : { id, class: id[0] }, base = (it && it.base) || {};
     const st = stageOf(r), dest = (r.dest || "").trim().toUpperCase();
     const fields = [];
-    if (r.wave) fields.push(["Wave", r.wave.replace(/^W/i, "Wave ")]);
+    if (r.wave) fields.push(["Wave", waveFull(r.wave.toUpperCase(), state.names)]);
     if (it && it.container) fields.push(["Container", it.container + (it.phase && it.phase !== "IN" ? " — " + phaseWords[it.phase] : "")]);
     if (r.from_tx) fields.push(["From Texas", TX[r.from_tx.trim().toUpperCase()] || r.from_tx]);
     if (r.set_id) fields.push(["Set", `${r.set_id} — part ${r.part_n || "?"} of ${r.part_total || "?"}`]);
@@ -688,7 +729,7 @@
             <label class="field">What's inside — kept off the label<textarea id="ed-uc" rows="3">${esc(uc)}</textarea></label>
             <label class="field">Notes — kept off the label<textarea id="ed-un" rows="2">${esc(un)}</textarea></label>
             <div class="row" style="margin-top:10px"><button class="save" id="ed-save">Save details</button><button class="quiet" id="ed-photo">Take a photo</button></div>
-            <div class="thumbs">${(thumbs[id] || []).map(u => `<img src="${u}" alt="">`).join("")}</div>
+            <div class="thumbs">${(it ? it.photos : []).map((ph, i) => `<button class="ptile" data-ph="${i}" aria-label="Open photo ${i + 1}">${thumbURL[ph.name] ? `<img src="${thumbURL[ph.name]}" alt="">` : `<span>Photo ${i + 1}<small>tap to open</small></span>`}</button>`).join("")}</div>
             <div class="pcount">${nPhotos ? `${nPhotos} photo${nPhotos === 1 ? "" : "s"} recorded for this one` : "No photos yet"}</div>
             <details class="labeltext" ${keep && keep.open ? "open" : ""}><summary>Change what's printed on the remaining labels</summary>
               <p class="note" style="color:#8a4b00">Anyone who can see the box can read this, and it goes into the QR. Leave valuables out — those belong in “What's inside”, above.</p>
@@ -723,6 +764,8 @@
       show(id, k.open ? { lc: k.lc, ln: k.ln, open: true } : null); setStatus(n ? "Details saved." : "Nothing had changed.", "ok");
     };
     $("ed-photo").onclick = () => { photoFor = id; $("cam").click(); };
+    out.querySelectorAll(".ptile").forEach(b => { const ph = it.photos[+b.dataset.ph]; b.onclick = () => openViewer(id, ph);
+      if (!thumbURL[ph.name]) idb.getThumb(ph.name).then(bl => { if (bl && b.isConnected) { thumbURL[ph.name] = URL.createObjectURL(bl); b.innerHTML = `<img src="${thumbURL[ph.name]}" alt="">`; } }); });
     out.querySelectorAll("[data-cp]").forEach(b => b.onclick = () => logCheckpoint(id, b.dataset.cp, keepNow()));
     if ($("ed-undo")) $("ed-undo").onclick = async () => { const last = lastCheckpointOf(id); if (!last || !confirm(`Undo “${cpWords[last.type]}” for ${CLASSWORD[id[0]]} ${id.slice(1)}?`)) return;
       const k = keepNow(), d = dirty; await record(mkEvent(cfg.who, id, "UNDO", { value: last.event_id })); show(id, d ? k : null); setStatus("Undone.", "ok"); };
@@ -734,7 +777,7 @@
   async function logCheckpoint(id, cp, keep) {
     const it = state.items[id], extra = {}, name = `${CLASSWORD[id[0]]} ${id.slice(1)}`;
     if (it && it.last && (it.last.type === cp || (cp === "SEALED" && it.last.type === "PACKED"))) { setStatus(`${name} was already marked “${cpWords[cp]}” ${agoText(it.last.ts)}${it.last.who ? " by " + it.last.who : ""}. Nothing added.`, "ok"); return; }
-    if (PACK_STATES.includes(cp) && serverOlderThan(1, 2) && scriptNeedsUpdate()) return;
+    if (PACK_STATES.includes(cp) && serverOlderThan(1, 2) && scriptNeedsUpdate("1.2")) return;
     if (cp === "READY" || cp === "SEALED") { const miss = missingBeforeSeal(it);
       if (miss.length && !confirm(`${name}: ${miss.join(" and ")} yet.\n\n${cp === "SEALED" ? "Once it is taped, adding them means opening it again. Mark it sealed anyway?" : "Mark it ready to seal anyway?"}`)) return; }
     if (cp === "LOADED") { const c = prompt("Which container? (POD1, TRUCK …)", (run && run.container) || lastContainer() || "POD1"); if (c === null) return; extra.container = c.trim().toUpperCase(); extra.wave = (run && run.wave) || ""; }
@@ -744,6 +787,34 @@
     setStatus(`${CLASSWORD[id[0]]} ${id.slice(1)}: ${cpWords[cp].toLowerCase()} recorded.`, "ok");
   }
   const lastContainer = () => { const all = mergeEvents(server, local); for (let i = all.length - 1; i >= 0; i--) if (all[i].container) return all[i].container; return ""; };
+
+  // ---- photo viewer: full size from this phone if it is still here, otherwise fetched from Drive; "remove" sets the file aside, never deletes it ----
+  let viewing = null;
+  const b64ToBlob = (b64, mime) => { const bin = atob(b64), u8 = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i); return new Blob([u8], { type: mime || "image/jpeg" }); };
+  async function openViewer(id, ph) {
+    viewing = { id, ph }; const img = $("viewer-img"), msg = $("viewer-msg");
+    $("viewer-cap").textContent = `${CLASSWORD[id[0]]} ${id.slice(1)} · ${whenText(ph.ts)}${ph.who ? " · " + ph.who : ""}`; img.removeAttribute("src"); img.hidden = true; msg.textContent = "Opening…"; $("viewer").hidden = false;
+    try {
+      if (!fullURL[ph.name]) { const rec = await idb.getPhoto(ph.event_id);
+        if (rec && rec.blob) fullURL[ph.name] = URL.createObjectURL(rec.blob);
+        else { if (!cfg.url) throw new Error("This photo is not on this phone, and sync is not set up.");
+          if (serverOlderThan(1, 3)) { $("viewer").hidden = true; scriptNeedsUpdate("1.3"); return; }
+          const r = await api("photo_get", { filename: ph.name }), bl = b64ToBlob(r.data, r.mime); fullURL[ph.name] = URL.createObjectURL(bl);
+          if (!thumbURL[ph.name]) { const small = await shrink(bl, 320); await idb.putThumb(ph.name, small); thumbURL[ph.name] = URL.createObjectURL(small); } } }
+      if (viewing && viewing.ph === ph) { img.src = fullURL[ph.name]; img.hidden = false; msg.textContent = ""; }
+    } catch (e) { msg.textContent = "Could not open it: " + (e.message || "no connection") + (navigator.onLine === false ? " (no connection)" : ""); }
+  }
+  function closeViewer() { $("viewer").hidden = true; viewing = null; if (currentId && !dirty) show(currentId); }
+  $("viewer-close").onclick = closeViewer;
+  $("viewer-del").onclick = async () => {
+    if (!viewing) return; const { id, ph } = viewing;
+    if (!confirm("Remove this photo from the box's record?\n\nThe file is not destroyed: in Drive it moves to a “_removed” folder.")) return;
+    const pendingRec = await idb.getPhoto(ph.event_id);
+    if (pendingRec) { await idb.delPhoto(ph.event_id); photosWaiting = Math.max(0, photosWaiting - 1); local = local.filter(e => e.event_id !== ph.event_id); await persistLocal(); recompute(); }   // never left this phone: just drop it
+    else { if (serverOlderThan(1, 3)) { scriptNeedsUpdate("1.3"); return; } await record(mkEvent(cfg.who, id, "UNDO", { value: ph.event_id, photo: ph.name, note: "photo removed" })); }
+    await idb.delThumb(ph.name); delete thumbURL[ph.name]; delete fullURL[ph.name];
+    $("viewer").hidden = true; viewing = null; const k = keepFields(), d = dirty; if (currentId === id) show(id, d ? k : null); setStatus("Photo removed from the record.", "ok");
+  };
 
   // ---- photos: named here, at capture, so nobody names or sorts anything later ----
   let photoFor = null;
@@ -764,7 +835,7 @@
       const blob = await shrink(f, cfg.photoMax), when = new Date(), name = photoName(id, when, cfg.who);
       const ev = mkEvent(cfg.who, id, "PHOTO", { photo: name, ts: when.toISOString() });
       await idb.putPhoto({ key: ev.event_id, ns: ns(), name, blob, event: wire(ev) });
-      photosWaiting++; (thumbs[id] = thumbs[id] || []).push(URL.createObjectURL(blob));
+      photosWaiting++; const small = await shrink(blob, 320); await idb.putThumb(name, small); thumbURL[name] = URL.createObjectURL(small); fullURL[name] = URL.createObjectURL(blob);
       const k = keepFields(), d = dirty;
       await record(ev); if (currentId === id) show(id, d ? k : null);
       setStatus(`Photo kept as ${name}${cfg.url ? " — uploading" : ""}.`, "ok");
@@ -774,12 +845,21 @@
   // ---- a loading / unloading run ----
   const runWords = { SEALED: "Sealing", LOADED: "Loading", RECEIVED: "Unloading", PLACED: "Putting in rooms" };
   let pickedType = null;
-  $("btn-run").onclick = () => { const p = $("run-setup"); p.hidden = !p.hidden; if (!p.hidden) { $("run-container").value = lastContainer() || ""; $("containers").innerHTML = Array.from(new Set(mergeEvents(server, local).map(e => e.container).filter(Boolean))).map(c => `<option value="${esc(c)}">`).join(""); } };
+  function renderModes() { $("main-actions").hidden = !!run; $("btn-scan").classList.toggle("on", scanning && !run); $("btn-scan").textContent = scanning && !run ? "Stop scanning" : "Scan Single Label"; $("btn-run").classList.toggle("on", !$("run-setup").hidden); }
+  function fillRunChoices() {
+    $("run-wave").innerHTML = ["W1", "W2", "W3"].map(w => `<option value="${w}">${esc(waveFull(w, state.names))}</option>`).join("") + `<option value="">Not decided</option>`;
+    const known = Array.from(new Set(mergeEvents(server, local).filter(e => e.type === "LOADED" && !state.undone.has(e.event_id)).map(e => e.container).filter(Boolean)));
+    $("run-known-label").hidden = !known.length; $("run-known").innerHTML = known.map(c => `<button class="quiet" data-known="${esc(c)}">${esc(c)}</button>`).join("");
+    $("run-known").querySelectorAll("button").forEach(b => b.onclick = () => { $("run-container").value = b.dataset.known; $("run-known").querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b)); });
+  }
+  $("btn-run").onclick = () => { const p = $("run-setup"); if (scanning) stopScan(); p.hidden = !p.hidden; if (!p.hidden) { currentId = null; $("result").innerHTML = ""; fillRunChoices(); $("run-container").value = lastContainer() || ""; $("containers").innerHTML = Array.from(new Set(mergeEvents(server, local).map(e => e.container).filter(Boolean))).map(c => `<option value="${esc(c)}">`).join(""); } };
   $("run-types").querySelectorAll("button").forEach(b => b.onclick = () => { pickedType = b.dataset.type; $("run-types").querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b)); $("run-load-fields").hidden = pickedType !== "LOADED"; $("run-start").disabled = false; });
-  $("run-cancel").onclick = () => { $("run-setup").hidden = true; };
+  $("btn-run").addEventListener("click", renderModes);
+  $("run-cancel").onclick = () => { $("run-setup").hidden = true; renderModes(); };
+  $("run-pause").onclick = () => { if (scanning) stopScan(); else { beepInit(); startScan(); } };
   $("run-start").onclick = () => {
     if (!pickedType) return;
-    if (pickedType === "SEALED" && serverOlderThan(1, 2) && scriptNeedsUpdate()) return;
+    if (pickedType === "SEALED" && serverOlderThan(1, 2) && scriptNeedsUpdate("1.2")) return;
     const container = $("run-container").value.trim().toUpperCase();
     if (pickedType === "LOADED" && !container) { setStatus("Name the container first — POD1, TRUCK …", "warn"); $("run-container").focus(); return; }
     run = { type: pickedType, container: pickedType === "LOADED" ? container : "", wave: pickedType === "LOADED" ? $("run-wave").value : "", count: 0 };
@@ -789,8 +869,9 @@
   $("run-end").onclick = () => { const n = run ? run.count : 0, was = run; endRun();
     setStatus(`Finished. ${n} recorded in that session.` + (was && was.type === "LOADED" ? ` When ${was.container} is picked up, mark it under “Where everything is”.` : ""), "ok"); syncSoon(); };
   function renderRun() {
-    $("runbar").hidden = !run; $("btn-run").hidden = !!run; if (!run) return;
-    $("run-what").innerHTML = `${runWords[run.type]}${run.container ? " → " + esc(run.container) : ""}${run.wave ? " · " + run.wave.replace(/^W/, "Wave ") : ""}<small>${run.count} recorded this session${scanning ? "" : " — tap “Scan a label” to continue"}</small>`;
+    $("runbar").hidden = !run; renderModes(); if (!run) return;
+    $("run-pause").textContent = scanning ? "Pause camera" : "Resume scanning";
+    $("run-what").innerHTML = `${runWords[run.type]}${run.container ? " → " + esc(run.container) : ""}${run.wave ? " · " + waveShort(run.wave) : ""}<small>${run.count} recorded this session${scanning ? "" : " — camera paused"}</small>`;
   }
   let lastRunHit = "", lastRunAt = 0, blocked = false, alarmTimer = null;
   function raiseAlarm(id, v) {
@@ -833,7 +914,7 @@
   let stream = null, track = null, caps = {}, scanning = false, lastHit = "", lastAt = 0, wake = null, detector = null, detectorTried = false, detErr = 0, frames = 0, scanErr = "", cams = [];
   const camPref = Object.assign({ deviceId: "", zoom: 2 }, store.get("lot26.cam") || {});
   const video = $("video"), canvas = document.createElement("canvas"), ctx = canvas.getContext("2d", { willReadFrequently: true });
-  $("btn-scan").onclick = () => { if (scanning) stopScan(); else { beepInit(); startScan(); } };
+  $("btn-scan").onclick = () => { if (scanning) stopScan(); else { $("run-setup").hidden = true; beepInit(); startScan(); } };
   function setStatus(msg, kind) { const el = $("scan-status"); el.textContent = msg; el.className = "status " + (kind || ""); }
   async function getDetector() {
     if (detectorTried) return detector; detectorTried = true;
@@ -858,13 +939,13 @@
     if (caps.focusMode && caps.focusMode.includes("continuous")) await tune({ focusMode: "continuous" });
     if (caps.zoom) { const steps = zoomSteps(); camPref.zoom = steps.includes(camPref.zoom) ? camPref.zoom : steps[Math.min(1, steps.length - 1)]; await tune({ zoom: camPref.zoom }); }
     try { const all = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === "videoinput"), back = all.filter(d => /back|rear|environment/i.test(d.label)); cams = back.length ? back : all; } catch (e) { cams = []; }
-    $("scan").classList.add("on"); $("btn-scan").textContent = "Stop scanning"; scanning = true; frames = 0; scanErr = ""; renderRun(); renderCamTools();
+    $("scan").classList.add("on"); scanning = true; frames = 0; scanErr = ""; renderRun(); renderCamTools();
     if (detector || typeof jsQR === "function") setStatus(run ? "Hold the phone about a foot from each label in turn. Listen for the beep." : "Hold the phone about a foot from the label, QR inside the box.");
     if (navigator.wakeLock) navigator.wakeLock.request("screen").then(w => { wake = w; }).catch(() => {});
     requestAnimationFrame(tick);
   }
   function stopScan() {
-    scanning = false; $("scan").classList.remove("on"); $("btn-scan").textContent = "Scan a label"; $("camtools").hidden = true; $("scan-diag").hidden = true;
+    scanning = false; $("scan").classList.remove("on"); $("camtools").hidden = true; $("scan-diag").hidden = true;
     if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; track = null; }
     if (wake) { try { wake.release(); } catch (e) {} wake = null; } renderRun();
   }
@@ -902,7 +983,8 @@
         frames++;
         const id = parseId(await readFrame()), now = Date.now();
         if (id && run) await handleRunScan(id);
-        else if (id && (id !== lastHit || now - lastAt > 2500)) { lastHit = id; lastAt = now; if (navigator.vibrate) navigator.vibrate(40); show(id); setStatus(`Read ${CLASSWORD[id[0]]} ${id.slice(1)}. Still scanning — point at the next label or tap Stop.`, "ok"); }
+        else if (id) { lastHit = id; lastAt = now; if (navigator.vibrate) navigator.vibrate(40); stopScan(); show(id); $("result").scrollIntoView({ block: "start", behavior: "smooth" });
+          setStatus(`Read ${CLASSWORD[id[0]]} ${id.slice(1)}.`, "ok"); return; }
       }
     } catch (e) { scanErr = (e && e.message) || "unknown"; }                                  // one bad frame must never stop the scanner
     if (frames % 8 === 0) renderCamTools();
