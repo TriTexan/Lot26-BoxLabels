@@ -207,6 +207,7 @@
     <label class="field">Wave 3<input id="name-W3" type="text" maxlength="40" autocomplete="off"></label>
     <div class="row" style="margin-top:12px"><button id="cfg-save">Save and test</button><button id="cfg-sync" class="quiet">Sync now</button></div>
     <div class="row" style="margin-top:8px"><button id="cfg-link" class="quiet">Copy setup link for another phone</button></div>
+    <div class="row" style="margin-top:8px"><button id="cfg-reset" class="quiet" hidden>Reset practice — start clean</button></div>
     <p class="note" id="sync-detail"></p>
     <p class="note">The setup link contains the sync address and passphrase. Send it only to the other phone.</p>
   </details>
@@ -414,7 +415,7 @@
     field: "", value: "", container: s.container || "", wave: "", location: s.location || "", photo: s.photo || "", note: s.note || "" });
 
   // ---- storage: small things in localStorage (shared with v1), events and photos in IndexedDB ----
-  const APP_VERSION = "Box app 2.8 (2026-09-21)";
+  const APP_VERSION = "Box app 2.9 (2026-09-21)";
   const $ = id => document.getElementById(id);
   const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const store = { get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } },
@@ -463,7 +464,7 @@
   function recompute() {
     state = deriveState(inventory ? inventory.rows : [], mergeEvents(server, local));
     lists = dayLists(state);
-    renderHeader(); renderPill(); renderRun(); fillNames(); renderDayLists(); renderWhere(); renderJournal(); renderReadyStrip();
+    renderHeader(); renderPill(); renderRun(); fillNames(); renderResetButton(); renderDayLists(); renderWhere(); renderJournal(); renderReadyStrip();
   }
   function renderHeader() {
     $("practice").hidden = !cfg.practice;
@@ -621,6 +622,7 @@
           if (rows.length && "id" in rows[0]) { inventory = { rows, loaded: new Date().toISOString(), name: "Drive", modified: s.inventory_modified, copies: s.inventory_copies }; store.set("lot26.inventory", inventory); } }
         server = Papa.parse(s.events_csv || "", { header: true, skipEmptyLines: true }).data.filter(e => e.event_id);
         await idb.set(mode + ":server", server).catch(() => {});
+        if (mode === "test") await honourPracticeReset();
       }
       sync.lastOk = Date.now(); sync.error = ""; sync.code = "";
     } catch (e) {
@@ -642,6 +644,7 @@
     for (const w of ["W1", "W2", "W3"]) { const v = $("name-" + w).value.trim(), cur = (state.names["wave:" + w] != null ? state.names["wave:" + w] : WAVE_DEFAULTS[w]);
       if (v !== cur) { if (serverOlderThan(1, 3)) { scriptNeedsUpdate("1.3"); return -1; } await record(mkEvent(cfg.who, "", "NAME", { field: "wave:" + w, value: v })); n++; } delete $("name-" + w).dataset.dirty; }
     return n; }
+  function renderResetButton() { $("cfg-reset").hidden = !cfg.practice; }
   function fillSettings() { $("cfg-who").value = cfg.who; $("cfg-url").value = cfg.url; $("cfg-token").value = cfg.token; $("cfg-photo").value = String(cfg.photoMax); $("cfg-practice").checked = !!cfg.practice; }
   async function loadNamespace() { local = (await idb.get(ns() + ":local")) || []; server = (await idb.get(ns() + ":server")) || []; photosWaiting = (await idb.photos(ns())).length; }
   async function saveSettings() {
@@ -658,6 +661,32 @@
     try { const r = await api("ping"); noteServer(r.version); setStatus(`Connected to ${r.version}${cfg.practice ? " — practice mode" : ""}.`, "ok"); if (cfg.who) $("d-settings").open = false; sync.error = ""; sync.code = ""; sync.lastPull = 0; syncSoon(); }
     catch (e) { sync.code = e.code || ""; sync.error = e.message; renderPill(); setStatus("Could not connect: " + e.message, "warn"); }
   }
+  // ---- practice reset: only ever practice records. The Drive script trashes the practice file and photo folder and starts a fresh file
+  //      whose first row is a RESET marker; every phone that sees a new marker clears its own practice records made before it.
+  async function clearPracticeBefore(tsISO) {
+    const gone = local.filter(e => e.ts <= tsISO); for (const e of gone.concat(server)) if (e.type === "PHOTO" && e.photo) { await idb.delThumb(e.photo); delete thumbURL[e.photo]; delete fullURL[e.photo]; }
+    for (const rec of await idb.photos("test")) if (((rec.event || {}).ts || "") <= tsISO) await idb.delPhoto(rec.key);
+    local = local.filter(e => e.ts > tsISO); photosWaiting = (await idb.photos("test")).length; await persistLocal();
+    currentId = null; $("result").innerHTML = ""; $("hit").hidden = true; if (run) endRun();
+  }
+  async function honourPracticeReset() {
+    const marks = server.filter(e => e.type === "RESET"); if (!marks.length) return;
+    const last = marks[marks.length - 1]; if (store.get("lot26.practiceReset") === last.event_id) return;
+    await clearPracticeBefore(last.ts); store.set("lot26.practiceReset", last.event_id);
+    setStatus(`Practice was reset${last.who ? " by " + last.who : ""} — this phone's practice records are cleared too.`, "ok");
+  }
+  $("cfg-reset").onclick = async () => {
+    if (!cfg.practice) return;
+    if (!confirm("Reset practice?\n\nEvery practice record and practice photo is cleared — on Drive (to the trash) and on both phones. Live records are never touched.")) return;
+    try {
+      if (cfg.url && cfg.token) { if (serverOlderThan(1, 4)) { scriptNeedsUpdate("1.4"); return; }
+        setStatus("Resetting practice…"); const r = await api("practice_reset", { who: cfg.who });
+        server = []; await idb.set("test:server", server).catch(() => {}); await clearPracticeBefore(r.reset_at); store.set("lot26.practiceReset", r.reset_id);
+        recompute(); sync.lastPull = 0; syncSoon(200);
+        setStatus(`Practice reset: ${r.trashed_photos} photo${r.trashed_photos === 1 ? "" : "s"} and the practice record moved to Drive's trash. The other phone clears itself at its next sync.`, "ok");
+      } else { server = []; await clearPracticeBefore(new Date().toISOString()); recompute(); setStatus("Practice records on this phone cleared.", "ok"); }
+    } catch (e) { setStatus("Reset did not finish: " + (e.message || "no connection") + ". Nothing was changed on this phone.", "warn"); }
+  };
   $("cfg-save").onclick = saveSettings;
   $("cfg-sync").onclick = () => { setStatus("Syncing…"); syncNow(true).then(() => setStatus(sync.error ? "Sync did not finish: " + sync.error : "Synced.", sync.error ? "warn" : "ok")); };
   $("cfg-link").onclick = async () => {
