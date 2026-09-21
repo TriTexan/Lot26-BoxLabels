@@ -117,19 +117,26 @@
   #alarm .alarm-id { font-size: clamp(34px, 11vw, 52px); font-weight: 800; line-height: 1; } #alarm .alarm-head { font-size: 22px; font-weight: 800; color: #8f0c20; margin-top: 8px; }
   #alarm .alarm-when { font-size: 18px; color: #333; margin-top: 2px; } #alarm p { margin: 12px 0 0; } #alarm button { width: 100%; margin-top: 16px; background: #111; color: #fff; font-size: 19px; padding: 16px; }
   #main-actions button.on { background: var(--btn); color: var(--btn-ink); border-color: var(--btn); }
-  #runbar button { margin-left: 6px; } #result { scroll-margin-top: 52px; }
+  #runbar button { margin-left: 6px; } 
   .thumbs .ptile { width: 84px; height: 84px; padding: 0; overflow: hidden; border-radius: 8px; border: 1px solid #ccc; background: #f3f3f3; color: #333; font-size: 13px; font-weight: 600; }
   .thumbs .ptile img { width: 100%; height: 100%; object-fit: cover; display: block; border: 0; border-radius: 0; } .thumbs .ptile small { display: block; font-weight: 400; color: #666; }
   #viewer { position: fixed; inset: 0; z-index: 25; background: #111; color: #fff; display: flex; flex-direction: column; }
   #viewer .viewer-bar { display: flex; align-items: center; gap: 10px; padding: 10px 12px; } #viewer .viewer-bar span { flex: 1 1 auto; font-size: 15px; } #viewer .viewer-bar button { flex: 0 0 auto; }
   #viewer .viewer-img { flex: 1 1 auto; overflow: auto; display: flex; align-items: center; justify-content: center; } #viewer img { max-width: 100%; max-height: 100%; touch-action: pinch-zoom; } #viewer p { color: #ddd; padding: 20px; text-align: center; }
-  #browsebar { position: sticky; top: 0; z-index: 4; display: flex; align-items: center; gap: 8px; background: var(--panel); color: var(--ink); border: 2px solid var(--btn); border-radius: 12px; padding: 8px 10px; margin: 8px 0; font-weight: 700; }
-  #practice:not([hidden]) ~ main #browsebar { top: 38px; } #browsebar .what { flex: 1 1 auto; line-height: 1.2; min-width: 0; } #browsebar .what small { display: block; font-weight: 500; color: var(--muted); }
+  #browsebar { display: flex; align-items: center; gap: 8px; background: var(--panel); color: var(--ink); border: 2px solid var(--btn); border-radius: 12px; padding: 8px 10px; margin: 8px 0; font-weight: 700; }
+  #browsebar .what { flex: 1 1 auto; line-height: 1.2; min-width: 0; } #browsebar .what small { display: block; font-weight: 500; color: var(--muted); }
   #browsebar button { flex: 0 0 auto; padding: 10px 14px; } #browsebar button:disabled { opacity: .35; }
   #ask { position: fixed; inset: 0; z-index: 30; display: flex; align-items: center; justify-content: center; padding: 18px; background: rgba(90, 60, 0, .93); }
   #ask .alarm-box { width: 100%; max-width: 520px; background: #fff; color: #111; border-radius: 16px; padding: 20px; border: 4px solid #b07a00; text-align: center; font-size: 17px; line-height: 1.4; }
   #ask .alarm-id { font-size: clamp(34px, 11vw, 52px); font-weight: 800; line-height: 1; } #ask .alarm-head { font-size: 21px; font-weight: 800; color: #6b4e00; margin-top: 8px; } #ask .alarm-when { font-size: 17px; color: #333; margin-top: 4px; }
   #ask p { margin: 12px 0 0; } #ask button { width: 100%; margin-top: 12px; font-size: 18px; padding: 15px; } #ask #ask-yes { background: #111; color: #fff; } #ask #ask-no { background: #f3f3f3; color: #111; border: 1px solid #ccc; }
+  .block .top .pos { font-weight: 700; font-size: 14px; padding: 2px 10px; border-radius: 999px; background: rgba(0,0,0,.28); color: #fff; align-self: center; }
+  .block.dark-ink .top .pos { background: rgba(255,255,255,.55); color: #111; }
+  .browsefoot { margin-top: 16px; border-top: 1px solid #ddd; padding-top: 12px; } .browsefoot button:disabled { opacity: .35; }
+  @keyframes fromRight { from { transform: translateX(72px); opacity: .15; } to { transform: none; opacity: 1; } }
+  @keyframes fromLeft { from { transform: translateX(-72px); opacity: .15; } to { transform: none; opacity: 1; } }
+  #result { overflow-x: hidden; } .label.from-right { animation: fromRight .22s ease-out; } .label.from-left { animation: fromLeft .22s ease-out; }
+  @media (prefers-reduced-motion: reduce) { .label.from-right, .label.from-left { animation: none; } }
   .sub.warn { color: var(--warn); }
 </style>
 </head>
@@ -450,7 +457,7 @@
     field: "", value: "", container: s.container || "", wave: "", location: s.location || "", photo: s.photo || "", note: s.note || "" });
 
   // ---- storage: small things in localStorage (shared with v1), events and photos in IndexedDB ----
-  const APP_VERSION = "Box app 3.0 (2026-09-21)";
+  const APP_VERSION = "Box app 3.1 (2026-09-21)";
   const $ = id => document.getElementById(id);
   const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const store = { get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } },
@@ -535,7 +542,10 @@
   const readyButtons = arr => `<div class="idlist">${arr.map(i => `<button class="quiet" data-open="${i.id}"><b>${CLASSWORD[i.id[0]] || ""} ${i.id.slice(1)}</b><span>${esc([describe(i), "ready since " + whenText(i.last.ts) + (i.last.who ? " (" + i.last.who + ")" : ""), i.photos.length ? "" : "no photo yet"].filter(Boolean).join(" · "))}</span></button>`).join("")}</div>`;
   function renderReadyStrip() { const n = lists.readyToSeal.length, b = $("ready-strip"); b.hidden = !n || !!(run && run.type === "SEALED"); b.textContent = `${n} box${n === 1 ? "" : "es"} ready to seal — show`; }
   $("ready-strip").onclick = () => { $("d-where").open = true; const t = document.getElementById("ready-list") || $("d-where"); t.scrollIntoView({ block: "start", behavior: "smooth" }); };
-  function wireOpen(root) { root.querySelectorAll("[data-open]").forEach(b => b.onclick = () => { show(b.dataset.open); $("result").scrollIntoView({ block: "start", behavior: "smooth" }); }); }
+  function cardToTop(smooth) { const box = $("result"); if (!box.firstElementChild) return; const el = box.querySelector(".label") || box;   // the card itself: it sits 14 px inside its container
+    const pad = ($("practice").hidden ? 0 : $("practice").offsetHeight) + ($("runbar").hidden ? 0 : $("runbar").offsetHeight + 8);
+    window.scrollTo({ top: Math.max(0, el.getBoundingClientRect().top + window.scrollY - pad), behavior: smooth ? "smooth" : "auto" }); }
+  function wireOpen(root) { root.querySelectorAll("[data-open]").forEach(b => b.onclick = () => { show(b.dataset.open); cardToTop(true); }); }
 
   function renderDayLists() {
     const el = $("daylists"); if (!run) { el.innerHTML = ""; return; }
@@ -583,9 +593,10 @@
   const containerWords = { DEPARTED: "picked up — on the way", DELIVERED: "delivered" };
   function containerCard(c) {
     const st = c.last ? `${containerWords[c.last.type]} since ${whenText(c.last.ts)}${c.last.who ? " (" + esc(c.last.who) + ")" : ""}` : "still here — not picked up yet";
-    const next = !c.last ? ["DEPARTED", `${esc(c.name)} has been picked up`] : c.last.type === "DEPARTED" ? ["DELIVERED", `${esc(c.name)} has been delivered`] : null;
+    const next = !c.last ? ["DEPARTED", `Mark ${esc(c.name)} as picked up`] : c.last.type === "DEPARTED" ? ["DELIVERED", `Mark ${esc(c.name)} as delivered`] : null;
     return `<div class="panel" style="margin-top:8px"><p class="ptitle">${esc(c.name)}${c.wave ? " · " + esc(waveFull(c.wave, state.names)) : ""}</p>
-      <p class="note" style="margin:0 0 8px;font-size:15px">${c.loaded} loaded · ${c.checkedIn} checked in at the other end · ${st}</p>
+      <p style="margin:0 0 4px;font-size:17px"><b>Status:</b> ${st}</p>
+      <p class="note" style="margin:0 0 10px;font-size:15px">${c.loaded} loaded · ${c.checkedIn} checked in at the other end</p>
       <div class="row">${next ? `<button data-c="${esc(c.name)}" data-cmark="${next[0]}">${next[1]}</button>` : ""}${c.last ? `<button class="quiet" data-c="${esc(c.name)}" data-cundo="1">Undo “${c.last.type === "DEPARTED" ? "picked up" : "delivered"}”</button>` : ""}</div></div>`;
   }
   async function markContainer(name, type) {
@@ -816,6 +827,7 @@
           ${it && it.last ? `<div class="chips"><button class="quiet" id="ed-undo">Undo “${cpWords[it.last.type]}” — it was a mistake</button></div>` : ""}
         </div>
       </div>`;
+    if (browse && browse.ids[browse.i] === id) setTimeout(() => decorateBrowseCard(), 0);
     const keepNow = keepFields;
     ["ed-uc", "ed-un", "ed-lc", "ed-ln"].forEach(k => $(k).oninput = () => { dirty = true; });
     $("ed-lsave").onclick = async () => {
@@ -976,7 +988,7 @@
     const h = $("hit"); h.hidden = false; h.className = tone;
     h.innerHTML = `${labelBlock(id, it && !it.unknown ? stageOf(it.row) : null)}<div class="verdict"><span>${esc(v.text)}${unknown ? " — not in the inventory on this phone" : ""}</span>${ev ? `<button class="quiet" id="hit-undo">Undo</button>` : ""}<button class="quiet" id="hit-open">Open</button></div>`;
     if (ev) $("hit-undo").onclick = async () => { await record(mkEvent(cfg.who, id, "UNDO", { value: ev.event_id })); run.count = Math.max(0, run.count - 1); store.set("lot26.run", run); renderRun(); h.className = "dup"; h.querySelector(".verdict span").textContent = "Undone — not recorded"; $("hit-undo").remove(); lastRunHit = ""; };
-    $("hit-open").onclick = () => { show(id); $("result").scrollIntoView({ block: "start", behavior: "smooth" }); };
+    $("hit-open").onclick = () => { show(id); cardToTop(true); };
     if (tone === "alert") raiseAlarm(id, v);
     else { beep(tone); if (navigator.vibrate) navigator.vibrate(tone === "ok" ? 60 : tone === "dup" ? [40, 60, 40] : [120, 60, 120]); }
   }
@@ -1010,13 +1022,21 @@
   $("br-start").onclick = () => startBrowse(browseMatches().map(i => i.id), 0);
   function startBrowse(ids, i) { if (!ids.length) return; browse = { ids, i, label: browseLabel() }; store.set("lot26.browse", browse); $("browse-setup").hidden = true; showBrowse(); }
   function showBrowse() { renderModes(); $("browse-what").innerHTML = `${esc(browse.label)}<small>${browse.i + 1} of ${browse.ids.length} — swipe, or use the arrows</small>`;
-    $("browse-prev").disabled = browse.i === 0; $("browse-next").disabled = browse.i === browse.ids.length - 1; show(browse.ids[browse.i]); window.scrollTo({ top: 0, behavior: "smooth" }); }
+    $("browse-prev").disabled = browse.i === 0; $("browse-next").disabled = browse.i === browse.ids.length - 1; show(browse.ids[browse.i]); decorateBrowseCard(); cardToTop(false); }
+  function decorateBrowseCard(dir) {
+    const card = document.querySelector("#result .label"); if (!card || !browse) return;
+    const top = card.querySelector(".block .top"); if (top && !top.querySelector(".pos")) { const p = document.createElement("span"); p.className = "pos"; p.textContent = `${browse.i + 1} of ${browse.ids.length}`; top.insertBefore(p, top.lastElementChild); }
+    if (!card.querySelector(".browsefoot")) { const f = document.createElement("div"); f.className = "row browsefoot";
+      f.innerHTML = `<button class="quiet" data-bgo="-1" ${browse.i === 0 ? "disabled" : ""}>◀ Previous</button><button class="quiet" data-bgo="1" ${browse.i === browse.ids.length - 1 ? "disabled" : ""}>Next ▶</button><button class="quiet" data-bdone="1">Done</button>`;
+      card.querySelector(".body").appendChild(f); f.querySelectorAll("[data-bgo]").forEach(b => b.onclick = () => browseGo(+b.dataset.bgo)); f.querySelector("[data-bdone]").onclick = () => $("browse-done").click(); }
+    if (dir) { card.classList.remove("from-right", "from-left"); void card.offsetWidth; card.classList.add(dir > 0 ? "from-right" : "from-left"); }
+  }
   async function saveDirty() {                                       // the same two saves as the card's buttons, without the taps
     if (!dirty || !currentId) return 0; const k = keepFields(); if (!k) return 0; const id = currentId, it = state.items[id], r = it ? it.row : {}; let n = 0;
     const put = async (field, val, cur) => { if (val.trim() !== (cur || "").trim()) { await record(mkEvent(cfg.who, id, "EDIT", { field, value: val.trim() })); n++; } };
     await put("unprinted_contents", k.uc, r.unprinted_contents); await put("unprinted_notes", k.un, [r.unprinted_notes, r.private_notes].filter(x => x && x.trim()).join("\n"));
     await put("contents", k.lc, r.contents); await put("notes", k.ln, r.notes); dirty = false; return n; }
-  async function browseGo(d) { if (!browse) return; const j = browse.i + d; if (j < 0 || j >= browse.ids.length) return; const n = await saveDirty(); browse.i = j; store.set("lot26.browse", browse); showBrowse(); if (n) setStatus("Saved what you typed on the last one.", "ok"); }
+  async function browseGo(d) { if (!browse) return; const j = browse.i + d; if (j < 0 || j >= browse.ids.length) return; const n = await saveDirty(); browse.i = j; store.set("lot26.browse", browse); setStatus(n ? "Saved what you typed on the last one." : "", n ? "ok" : ""); showBrowse(); decorateBrowseCard(d); }
   $("browse-prev").onclick = () => browseGo(-1); $("browse-next").onclick = () => browseGo(1);
   $("browse-done").onclick = async () => { const n = await saveDirty(); browse = null; store.set("lot26.browse", null); currentId = null; $("result").innerHTML = ""; renderModes(); setStatus(n ? "Saved what you typed. Finished browsing." : "Finished browsing.", "ok"); };
   let swipe = null;                                                  // a sideways swipe on the card = next / previous (not when it starts in a text box: that is the caret)
@@ -1103,7 +1123,7 @@
         frames++;
         const id = parseId(await readFrame()), now = Date.now();
         if (id && run) await handleRunScan(id);
-        else if (id) { lastHit = id; lastAt = now; if (navigator.vibrate) navigator.vibrate(40); stopScan(); show(id); $("result").scrollIntoView({ block: "start", behavior: "smooth" });
+        else if (id) { lastHit = id; lastAt = now; if (navigator.vibrate) navigator.vibrate(40); stopScan(); show(id); cardToTop(true);
           setStatus(`Read ${CLASSWORD[id[0]]} ${id.slice(1)}.`, "ok"); return; }
       }
     } catch (e) { scanErr = (e && e.message) || "unknown"; }                                  // one bad frame must never stop the scanner
