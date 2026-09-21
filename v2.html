@@ -123,6 +123,13 @@
   #viewer { position: fixed; inset: 0; z-index: 25; background: #111; color: #fff; display: flex; flex-direction: column; }
   #viewer .viewer-bar { display: flex; align-items: center; gap: 10px; padding: 10px 12px; } #viewer .viewer-bar span { flex: 1 1 auto; font-size: 15px; } #viewer .viewer-bar button { flex: 0 0 auto; }
   #viewer .viewer-img { flex: 1 1 auto; overflow: auto; display: flex; align-items: center; justify-content: center; } #viewer img { max-width: 100%; max-height: 100%; touch-action: pinch-zoom; } #viewer p { color: #ddd; padding: 20px; text-align: center; }
+  #browsebar { position: sticky; top: 0; z-index: 4; display: flex; align-items: center; gap: 8px; background: var(--panel); color: var(--ink); border: 2px solid var(--btn); border-radius: 12px; padding: 8px 10px; margin: 8px 0; font-weight: 700; }
+  #practice:not([hidden]) ~ main #browsebar { top: 38px; } #browsebar .what { flex: 1 1 auto; line-height: 1.2; min-width: 0; } #browsebar .what small { display: block; font-weight: 500; color: var(--muted); }
+  #browsebar button { flex: 0 0 auto; padding: 10px 14px; } #browsebar button:disabled { opacity: .35; }
+  #ask { position: fixed; inset: 0; z-index: 30; display: flex; align-items: center; justify-content: center; padding: 18px; background: rgba(90, 60, 0, .93); }
+  #ask .alarm-box { width: 100%; max-width: 520px; background: #fff; color: #111; border-radius: 16px; padding: 20px; border: 4px solid #b07a00; text-align: center; font-size: 17px; line-height: 1.4; }
+  #ask .alarm-id { font-size: clamp(34px, 11vw, 52px); font-weight: 800; line-height: 1; } #ask .alarm-head { font-size: 21px; font-weight: 800; color: #6b4e00; margin-top: 8px; } #ask .alarm-when { font-size: 17px; color: #333; margin-top: 4px; }
+  #ask p { margin: 12px 0 0; } #ask button { width: 100%; margin-top: 12px; font-size: 18px; padding: 15px; } #ask #ask-yes { background: #111; color: #fff; } #ask #ask-no { background: #f3f3f3; color: #111; border: 1px solid #ccc; }
   .sub.warn { color: var(--warn); }
 </style>
 </head>
@@ -132,6 +139,16 @@
   <div class="viewer-bar"><span id="viewer-cap"></span><button id="viewer-close" class="quiet">Close</button></div>
   <div class="viewer-img"><img id="viewer-img" alt=""><p id="viewer-msg"></p></div>
   <div class="viewer-bar"><button id="viewer-del" class="quiet">Remove this photo</button></div>
+</div>
+<div id="ask" hidden role="alertdialog" aria-modal="true">
+  <div class="alarm-box">
+    <div class="alarm-id" id="ask-id"></div>
+    <div class="alarm-head" id="ask-head"></div>
+    <div class="alarm-when" id="ask-when"></div>
+    <p>Not loaded yet. Scanning is paused.</p>
+    <button id="ask-yes"></button>
+    <button id="ask-no" class="quiet"></button>
+  </div>
 </div>
 <div id="alarm" hidden role="alertdialog" aria-modal="true">
   <div class="alarm-box">
@@ -156,6 +173,19 @@
   <div class="row" id="main-actions">
     <button id="btn-scan" class="quiet">Scan Single Label</button>
     <button id="btn-run" class="quiet">Scan Multiple: Seal · Load · Unload</button>
+    <button id="btn-browse" class="quiet">Browse by Room</button>
+  </div>
+
+  <div id="browsebar" hidden><button id="browse-prev" aria-label="Previous">◀</button><div class="what" id="browse-what"></div><button id="browse-next" aria-label="Next">▶</button><button id="browse-done">Done</button></div>
+
+  <div id="browse-setup" class="panel" hidden>
+    <p class="ptitle">Go through the boxes for one area</p>
+    <label class="field">Stage area (where it is dropped first)<select id="br-stage"></select></label>
+    <label class="field">Final location<select id="br-final"></select></label>
+    <label class="field">Planned wave<select id="br-wave"></select></label>
+    <p class="note" id="br-count"></p>
+    <div class="row" style="margin-top:8px"><button id="br-start" disabled>Start with the first</button><button id="br-cancel" class="quiet">Cancel</button></div>
+    <div id="br-list" style="margin-top:10px"></div>
   </div>
 
   <div id="run-setup" class="panel" hidden>
@@ -268,7 +298,8 @@
   const WAVE_DEFAULTS = { W1: "the Pre-Pod", W2: "the main move", W3: "after the sale" };
   const waveShort = code => (code || "").replace(/^W/i, "Wave ");
   const waveFull = (code, names) => { const v = (names || {})["wave:" + code], n = (v != null ? v : (WAVE_DEFAULTS[code] || "")).trim(); return waveShort(code) + (n ? " — " + n : ""); };
-  const W1_WORDS = { MUST: "Must go", OK: "Can go if there's room", NO: "Not in the pod" };
+  const W1_WORDS = { MUST: "Must go", OK: "Can go if there's room" };      // asked only of items planned for Wave 1; "not going" is now said by planning another wave
+  const WAVES = ["W1", "W2", "W3"];
 
   function uuid() {
     if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
@@ -330,7 +361,10 @@
       it.arrived = !!(it.loaded && cps.some(e => (e.type === "RECEIVED" || e.type === "PLACED") && e.ts > it.loaded.ts));
       it.received = cps.some(e => e.type === "RECEIVED" || e.type === "PLACED");
       if (it.loaded) { if (it.loaded.wave) it.row.wave = it.loaded.wave; it.container = it.loaded.container || ""; }
-      it.w1 = (it.row.w1 || "").trim().toUpperCase();
+      // planned wave: what we THINK it travels in (set on the card, or from inventory). Once loaded, the wave it was actually loaded in is the fact.
+      const pw = ((it.edits.wave != null ? it.edits.wave : ((it.base || {}).wave || "")) || "").trim().toUpperCase(); it.plannedWave = WAVES.includes(pw) ? pw : "";
+      if (!it.loaded) it.row.wave = it.plannedWave;
+      it.w1 = it.plannedWave === "W1" && W1_WORDS[(it.row.w1 || "").trim().toUpperCase()] ? (it.row.w1 || "").trim().toUpperCase() : "";
       // Where is a loaded item? Only a container event made AFTER this item went in counts for it (a container name can be reused for a later trip).
       const c = it.loaded && it.container ? box(it.container) : null, after = t => c && c.events.filter(e => e.type === t && e.ts > it.loaded.ts).pop();
       it.departed = after("DEPARTED") || null; it.delivered = after("DELIVERED") || null;
@@ -354,6 +388,7 @@
       onboard: transit.filter(i => i.phase === "ONBOARD"), onTheWay: transit.filter(i => i.phase === "TRANSIT"), delivered: transit.filter(i => i.phase === "DELIVERED"),
       containers: Object.values(state.containers || {}).filter(c => c.loaded || c.events.length).sort((a, b) => (a.name < b.name ? -1 : 1)),
       packing: all.filter(i => i.last && i.last.type === "STARTED"), readyToSeal: all.filter(i => i.last && i.last.type === "READY"), sealed: all.filter(i => isSealed(i)),
+      plan: WAVES.concat([""]).map(w => ({ wave: w, planned: all.filter(i => !i.unknown && (i.loaded ? (i.loaded.wave || "") : i.plannedWave) === w).length, loaded: all.filter(i => i.loaded && (i.loaded.wave || "") === w).length })),
       mustNotLoaded: all.filter(i => i.w1 === "MUST" && !i.loaded),
       canGo: all.filter(i => i.w1 === "OK" && !i.loaded),
       inTransit: transit, byContainer
@@ -383,7 +418,7 @@
     }
     if (run.type === "LOADED") {
       if (item && item.loaded && !item.arrived) return repeatVerdict(item.loaded, `Already loaded${item.container ? " in " + item.container : ""}`, "loading", now);
-      if (item && item.w1 === "NO") return { log: true, tone: "warn", text: "Loaded — but this one was marked “Not in the pod”" };
+      if (item && item.plannedWave && run.wave && item.plannedWave !== run.wave) return { log: false, ask: "wave", tone: "ask", planned: item.plannedWave, text: "Planned for a different wave" };   // a person decides: change the plan and load it, or leave it off
       if (item && item.id[0] === "B" && !isSealed(item)) return { log: true, tone: "warn", text: "Loaded — it was never marked sealed" };   // boxes only; furniture and equipment are not sealed
       return { log: true, tone: "ok", text: "Loaded" };
     }
@@ -415,7 +450,7 @@
     field: "", value: "", container: s.container || "", wave: "", location: s.location || "", photo: s.photo || "", note: s.note || "" });
 
   // ---- storage: small things in localStorage (shared with v1), events and photos in IndexedDB ----
-  const APP_VERSION = "Box app 2.9 (2026-09-21)";
+  const APP_VERSION = "Box app 3.0 (2026-09-21)";
   const $ = id => document.getElementById(id);
   const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const store = { get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } },
@@ -533,6 +568,7 @@
         <span>With at least one photo</span><b>${c.photos}</b>
         ${c.unknown ? `<span>Scanned, but not in the inventory</span><b>${c.unknown}</b>` : ""}
       </div>
+      <div class="daylist"><h2>Plan by wave</h2><div class="counts">${lists.plan.map(x => `<span>${esc(x.wave ? waveFull(x.wave, state.names) : "No wave planned yet")}</span><b>${x.planned}${x.wave ? ` · ${x.loaded} loaded` : ""}</b>`).join("")}</div></div>
       ${lists.readyToSeal.length ? `<div class="daylist" id="ready-list"><h2>Ready to seal (${lists.readyToSeal.length})</h2>${readyButtons(lists.readyToSeal)}</div>` : ""}
       ${lists.packing.length ? `<div class="daylist"><h2>Packing in progress (${lists.packing.length})</h2>${idButtons(lists.packing)}</div>` : ""}
       ${lists.containers.length ? `<div class="daylist"><h2>Pods and trucks</h2>${lists.containers.map(containerCard).join("")}</div>` : ""}
@@ -639,6 +675,7 @@
   document.addEventListener("visibilitychange", () => { if (document.hidden) { if (scanning) stopScan(); } else syncSoon(800); });
 
   // ---- settings ----
+  const waveName = w => { const v = state.names["wave:" + w], n = (v != null ? v : (WAVE_DEFAULTS[w] || "")).trim(); return n || waveShort(w); };
   function fillNames() { ["W1", "W2", "W3"].forEach(w => { const el = $("name-" + w); el.oninput = () => { el.dataset.dirty = "1"; }; if (!el.dataset.dirty) el.value = (state.names["wave:" + w] != null ? state.names["wave:" + w] : WAVE_DEFAULTS[w]); }); }
   async function saveNames() { let n = 0;
     for (const w of ["W1", "W2", "W3"]) { const v = $("name-" + w).value.trim(), cur = (state.names["wave:" + w] != null ? state.names["wave:" + w] : WAVE_DEFAULTS[w]);
@@ -739,6 +776,7 @@
     const hand = [r.contents, r.notes].filter(x => x && x.trim()).join("\n");
     const had = (k, v) => (keep && keep[k] != null ? keep[k] : v);
     const uc = had("uc", r.unprinted_contents || ""), un = had("un", [r.unprinted_notes, r.private_notes].filter(x => x && x.trim()).join("\n"));
+    const pw = it ? it.plannedWave : "";
     const lc = had("lc", r.contents || ""), ln = had("ln", r.notes || ""), labelChanged = !!(it && (it.edits.contents !== undefined || it.edits.notes !== undefined));
     const hist = it ? it.history : [], nPhotos = it ? it.photos.length : 0, w1 = it ? it.w1 : "";
     out.innerHTML = `
@@ -752,8 +790,10 @@
           ${labelChanged ? `<p class="note" style="color:#555">Label text was changed after the first label was printed — the remaining labels will carry it.</p>` : ""}
           ${fields.length ? `<dl>${fields.map(([k, v]) => `<dt>${k}</dt><dd>${esc(v)}</dd>`).join("")}</dl>` : ""}
           <div class="edit">
-            <div class="elabel">Going in the pod?</div>
-            <div class="chips">${Object.keys(W1_WORDS).map(k => `<button class="quiet ${w1 === k ? "on" : ""}" data-w1="${k}">${W1_WORDS[k]}</button>`).join("")}</div>
+            ${it && it.loaded ? "" : `<div class="elabel">Which wave is it planned for?</div>
+            <div class="chips">${WAVES.map(w => `<button class="quiet ${pw === w ? "on" : ""}" data-wave="${w}">${esc(waveFull(w, state.names))}</button>`).join("")}</div>`}
+            ${pw === "W1" && !(it && it.loaded) ? `<div class="elabel">Going in ${esc(waveName("W1"))}?</div>
+            <div class="chips">${Object.keys(W1_WORDS).map(k => `<button class="quiet ${w1 === k ? "on" : ""}" data-w1="${k}">${W1_WORDS[k]}</button>`).join("")}</div>` : ""}
             ${!(base.dest || "").trim() ? `<label class="field">Final location written on this label<select id="ed-dest"><option value="">— choose —</option>${DEST_CHOICES.map(d => `<option value="${d}" ${d === dest ? "selected" : ""}>${esc(disp(d))}</option>`).join("")}</select></label>` : ""}
             <label class="field">What's inside — kept off the label<textarea id="ed-uc" rows="3">${esc(uc)}</textarea></label>
             <label class="field">Notes — kept off the label<textarea id="ed-un" rows="2">${esc(un)}</textarea></label>
@@ -784,6 +824,8 @@
       if (k.ln.trim() !== (r.notes || "").trim()) { await record(mkEvent(cfg.who, id, "EDIT", { field: "notes", value: k.ln.trim() })); n++; }
       show(id, { uc: k.uc, un: k.un, open: true }); setStatus(n ? "Label text saved. It prints on this box's remaining labels." : "Nothing had changed.", "ok");
     };
+    out.querySelectorAll("[data-wave]").forEach(b => b.onclick = async () => { if (serverOlderThan(1, 5)) { scriptNeedsUpdate("1.5"); return; }
+      const k = keepNow(), d = dirty; await record(mkEvent(cfg.who, id, "EDIT", { field: "wave", value: pw === b.dataset.wave ? "" : b.dataset.wave })); show(id, d ? k : null); });
     out.querySelectorAll("[data-w1]").forEach(b => b.onclick = async () => { const k = keepNow(), d = dirty; await record(mkEvent(cfg.who, id, "EDIT", { field: "w1", value: w1 === b.dataset.w1 ? "" : b.dataset.w1 })); show(id, d ? k : null); });
     if ($("ed-dest")) $("ed-dest").onchange = async e => { const k = keepNow(), d = dirty; await record(mkEvent(cfg.who, id, "EDIT", { field: "dest", value: e.target.value })); show(id, d ? k : null); setStatus("Final location recorded.", "ok"); };
     $("ed-save").onclick = async () => {
@@ -874,14 +916,14 @@
   // ---- a loading / unloading run ----
   const runWords = { SEALED: "Sealing", LOADED: "Loading", RECEIVED: "Unloading", PLACED: "Putting in rooms" };
   let pickedType = null;
-  function renderModes() { $("main-actions").hidden = !!run; $("btn-scan").classList.toggle("on", scanning && !run); $("btn-scan").textContent = scanning && !run ? "Stop scanning" : "Scan Single Label"; $("btn-run").classList.toggle("on", !$("run-setup").hidden); }
+  function renderModes() { $("main-actions").hidden = !!run || !!browse; $("browsebar").hidden = !browse || !!run; $("btn-browse").classList.toggle("on", !$("browse-setup").hidden); $("btn-scan").classList.toggle("on", scanning && !run); $("btn-scan").textContent = scanning && !run ? "Stop scanning" : "Scan Single Label"; $("btn-run").classList.toggle("on", !$("run-setup").hidden); }
   function fillRunChoices() {
     $("run-wave").innerHTML = ["W1", "W2", "W3"].map(w => `<option value="${w}">${esc(waveFull(w, state.names))}</option>`).join("") + `<option value="">Not decided</option>`;
     const known = Array.from(new Set(mergeEvents(server, local).filter(e => e.type === "LOADED" && !state.undone.has(e.event_id)).map(e => e.container).filter(Boolean)));
     $("run-known-label").hidden = !known.length; $("run-known").innerHTML = known.map(c => `<button class="quiet" data-known="${esc(c)}">${esc(c)}</button>`).join("");
     $("run-known").querySelectorAll("button").forEach(b => b.onclick = () => { $("run-container").value = b.dataset.known; $("run-known").querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b)); });
   }
-  $("btn-run").onclick = () => { const p = $("run-setup"); if (scanning) stopScan(); p.hidden = !p.hidden; if (!p.hidden) { currentId = null; $("result").innerHTML = ""; fillRunChoices(); $("run-container").value = lastContainer() || ""; $("containers").innerHTML = Array.from(new Set(mergeEvents(server, local).map(e => e.container).filter(Boolean))).map(c => `<option value="${esc(c)}">`).join(""); } };
+  $("btn-run").onclick = () => { const p = $("run-setup"); $("browse-setup").hidden = true; if (scanning) stopScan(); p.hidden = !p.hidden; if (!p.hidden) { currentId = null; $("result").innerHTML = ""; fillRunChoices(); $("run-container").value = lastContainer() || ""; $("containers").innerHTML = Array.from(new Set(mergeEvents(server, local).map(e => e.container).filter(Boolean))).map(c => `<option value="${esc(c)}">`).join(""); } };
   $("run-types").querySelectorAll("button").forEach(b => b.onclick = () => { pickedType = b.dataset.type; $("run-types").querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b)); $("run-load-fields").hidden = pickedType !== "LOADED"; $("run-start").disabled = false; });
   $("btn-run").addEventListener("click", renderModes);
   $("run-cancel").onclick = () => { $("run-setup").hidden = true; renderModes(); };
@@ -910,10 +952,21 @@
     sound(); clearInterval(alarmTimer); alarmTimer = setInterval(sound, 2500);                     // keeps sounding until someone answers it
   }
   $("alarm-ok").onclick = () => { clearInterval(alarmTimer); if (navigator.vibrate) navigator.vibrate(0); $("alarm").hidden = true; blocked = false; lastRunAt = Date.now(); };
+  let asking = null;
+  function raiseAsk(id, v) {
+    blocked = true; asking = { id }; const name = `${CLASSWORD[id[0]] || id[0]} ${id.slice(1)}`;
+    $("ask-id").textContent = name; $("ask-head").textContent = "Planned for " + waveFull(v.planned, state.names); $("ask-when").textContent = `You are loading ${waveFull(run.wave, state.names)}${run.container ? " into " + run.container : ""}.`;
+    $("ask-yes").textContent = `Load it now — change it to ${waveShort(run.wave)}`; $("ask-no").textContent = `Don't load it — it stays ${waveShort(v.planned)}`;
+    $("ask").hidden = false; beep("warn"); if (navigator.vibrate) navigator.vibrate([120, 60, 120]);
+  }
+  $("ask-no").onclick = () => { const a = asking; asking = null; $("ask").hidden = true; blocked = false; lastRunAt = Date.now(); if (a) setStatus(`${CLASSWORD[a.id[0]]} ${a.id.slice(1)} was not loaded. Its plan is unchanged.`, "ok"); };
+  $("ask-yes").onclick = async () => { const a = asking; if (!a || !run) return; if (serverOlderThan(1, 5)) { scriptNeedsUpdate("1.5"); return; }
+    asking = null; $("ask").hidden = true; blocked = false; await record(mkEvent(cfg.who, a.id, "EDIT", { field: "wave", value: run.wave, note: "changed at the door while loading " + (run.container || "") })); await handleRunScan(a.id, true); };
   async function handleRunScan(id, typed) {
     if (blocked) return;
     const now = Date.now(); if (!typed && id === lastRunHit && now - lastRunAt < 4000) { lastRunAt = now; return; } lastRunHit = id; lastRunAt = now;
     const it = state.items[id], v = runVerdict(it, run); let ev = null;
+    if (v.ask === "wave") { raiseAsk(id, v); return; }
     if (v.log) {
       const extra = run.type === "SEALED" ? {} : run.type === "LOADED" ? { container: run.container, wave: run.wave } : { location: it ? (run.type === "PLACED" ? ((it.row.dest || "").trim().toUpperCase() || stageOf(it.row)) : stageOf(it.row)) : "" };
       run.count++; store.set("lot26.run", run); ev = await record(mkEvent(cfg.who, id, run.type, extra));
@@ -932,6 +985,44 @@
   function beep(tone) { if (!audio) return; try { const o = audio.createOscillator(), g = audio.createGain(); o.connect(g); g.connect(audio.destination);
     o.frequency.value = tone === "ok" ? 1040 : tone === "dup" ? 420 : 640; g.gain.value = 0.18; const t = audio.currentTime, len = tone === "ok" ? 0.09 : 0.28; o.start(t); g.gain.setValueAtTime(0.18, t + len - 0.03); g.gain.linearRampToValueAtTime(0, t + len); o.stop(t + len); } catch (e) {} }
 
+  // ---- browse by room: pick an area (and/or a wave), then go through its boxes one card at a time — same card, same edits as a single scan.
+  //      The set is fixed when the pass starts, so changing a box's wave mid-pass does not make the list jump. Moving on saves what was typed.
+  let browse = store.get("lot26.browse") || null;                 // { ids, i, label }
+  const known = () => Object.values(state.items).filter(i => !i.unknown).sort((a, b) => (a.id < b.id ? -1 : 1));
+  const finalOf = i => (i.row.dest || "").trim().toUpperCase();
+  function browseMatches() { const st = $("br-stage").value, fi = $("br-final").value, wv = $("br-wave").value;
+    return known().filter(i => (!st || stageOf(i.row) === st) && (!fi || (fi === "(blank)" ? !finalOf(i) : finalOf(i) === fi)) && (wv === "*" || (i.loaded ? (i.loaded.wave || "") : i.plannedWave) === wv)); }
+  function fillBrowseChoices() {
+    const items = known(), opt = (v, t) => `<option value="${esc(v)}">${esc(t)}</option>`, keep = { s: $("br-stage").value, f: $("br-final").value, w: $("br-wave").value || "*" };
+    const stages = Array.from(new Set(items.map(i => stageOf(i.row)))).sort((a, b) => disp(a).localeCompare(disp(b))), finals = Array.from(new Set(items.map(finalOf).filter(Boolean))).sort((a, b) => disp(a).localeCompare(disp(b)));
+    $("br-stage").innerHTML = opt("", "Any stage area") + stages.map(x => opt(x, disp(x))).join("");
+    $("br-final").innerHTML = opt("", "Any final location") + finals.map(x => opt(x, disp(x))).join("") + (items.some(i => !finalOf(i)) ? opt("(blank)", "Write-in, not recorded yet") : "");
+    $("br-wave").innerHTML = opt("*", "Any wave") + WAVES.map(w => opt(w, waveFull(w, state.names))).join("") + opt("", "No wave planned yet");
+    $("br-stage").value = keep.s; $("br-final").value = keep.f; $("br-wave").value = keep.w; renderBrowseList();
+  }
+  function browseLabel() { const parts = [$("br-stage").value && disp($("br-stage").value), $("br-final").value && ($("br-final").value === "(blank)" ? "write-ins" : "→ " + disp($("br-final").value)), $("br-wave").value !== "*" && ($("br-wave").value ? waveShort($("br-wave").value) : "no wave yet")].filter(Boolean); return parts.join(" · ") || "Everything"; }
+  function renderBrowseList() { const m = browseMatches(); $("br-count").textContent = `${m.length} item${m.length === 1 ? "" : "s"} match.`; $("br-start").disabled = !m.length;
+    $("br-list").innerHTML = `<div class="idlist">${m.map((i, n) => `<button class="quiet" data-bidx="${n}"><b>${CLASSWORD[i.id[0]] || ""} ${i.id.slice(1)}</b><span>${esc(describe(i))}</span></button>`).join("")}</div>`;
+    $("br-list").querySelectorAll("[data-bidx]").forEach(b => b.onclick = () => startBrowse(m.map(i => i.id), +b.dataset.bidx)); }
+  ["br-stage", "br-final", "br-wave"].forEach(k => $(k).onchange = renderBrowseList);
+  $("btn-browse").onclick = () => { const p = $("browse-setup"); if (scanning) stopScan(); $("run-setup").hidden = true; p.hidden = !p.hidden; if (!p.hidden) { currentId = null; $("result").innerHTML = ""; fillBrowseChoices(); } renderModes(); };
+  $("br-cancel").onclick = () => { $("browse-setup").hidden = true; renderModes(); };
+  $("br-start").onclick = () => startBrowse(browseMatches().map(i => i.id), 0);
+  function startBrowse(ids, i) { if (!ids.length) return; browse = { ids, i, label: browseLabel() }; store.set("lot26.browse", browse); $("browse-setup").hidden = true; showBrowse(); }
+  function showBrowse() { renderModes(); $("browse-what").innerHTML = `${esc(browse.label)}<small>${browse.i + 1} of ${browse.ids.length} — swipe, or use the arrows</small>`;
+    $("browse-prev").disabled = browse.i === 0; $("browse-next").disabled = browse.i === browse.ids.length - 1; show(browse.ids[browse.i]); window.scrollTo({ top: 0, behavior: "smooth" }); }
+  async function saveDirty() {                                       // the same two saves as the card's buttons, without the taps
+    if (!dirty || !currentId) return 0; const k = keepFields(); if (!k) return 0; const id = currentId, it = state.items[id], r = it ? it.row : {}; let n = 0;
+    const put = async (field, val, cur) => { if (val.trim() !== (cur || "").trim()) { await record(mkEvent(cfg.who, id, "EDIT", { field, value: val.trim() })); n++; } };
+    await put("unprinted_contents", k.uc, r.unprinted_contents); await put("unprinted_notes", k.un, [r.unprinted_notes, r.private_notes].filter(x => x && x.trim()).join("\n"));
+    await put("contents", k.lc, r.contents); await put("notes", k.ln, r.notes); dirty = false; return n; }
+  async function browseGo(d) { if (!browse) return; const j = browse.i + d; if (j < 0 || j >= browse.ids.length) return; const n = await saveDirty(); browse.i = j; store.set("lot26.browse", browse); showBrowse(); if (n) setStatus("Saved what you typed on the last one.", "ok"); }
+  $("browse-prev").onclick = () => browseGo(-1); $("browse-next").onclick = () => browseGo(1);
+  $("browse-done").onclick = async () => { const n = await saveDirty(); browse = null; store.set("lot26.browse", null); currentId = null; $("result").innerHTML = ""; renderModes(); setStatus(n ? "Saved what you typed. Finished browsing." : "Finished browsing.", "ok"); };
+  let swipe = null;                                                  // a sideways swipe on the card = next / previous (not when it starts in a text box: that is the caret)
+  $("result").addEventListener("touchstart", e => { const t = e.target.tagName; swipe = browse && !/TEXTAREA|INPUT|SELECT/.test(t) && e.touches.length === 1 ? { x: e.touches[0].clientX, y: e.touches[0].clientY, at: Date.now() } : null; }, { passive: true });
+  $("result").addEventListener("touchend", e => { if (!swipe) return; const c = e.changedTouches[0], dx = c.clientX - swipe.x, dy = c.clientY - swipe.y, quick = Date.now() - swipe.at < 700; swipe = null; if (quick && Math.abs(dx) > 70 && Math.abs(dy) < 50) browseGo(dx < 0 ? 1 : -1); }, { passive: true });
+
   // ---- manual entry ----
   function lookup(text) { const id = parseId(text); if (!id) { setStatus("Enter a number like 052, or F013 / E002.", "warn"); return; } $("manual").value = ""; if (run) { if (blocked) return; handleRunScan(id, true); } else show(id); }
   $("btn-go").onclick = () => lookup($("manual").value);
@@ -943,7 +1034,7 @@
   let stream = null, track = null, caps = {}, scanning = false, lastHit = "", lastAt = 0, wake = null, detector = null, detectorTried = false, detErr = 0, frames = 0, scanErr = "", cams = [];
   const camPref = Object.assign({ deviceId: "", zoom: 2 }, store.get("lot26.cam") || {});
   const video = $("video"), canvas = document.createElement("canvas"), ctx = canvas.getContext("2d", { willReadFrequently: true });
-  $("btn-scan").onclick = () => { if (scanning) stopScan(); else { $("run-setup").hidden = true; beepInit(); startScan(); } };
+  $("btn-scan").onclick = () => { if (scanning) stopScan(); else { $("run-setup").hidden = true; $("browse-setup").hidden = true; beepInit(); startScan(); } };
   function setStatus(msg, kind) { const el = $("scan-status"); el.textContent = msg; el.className = "status " + (kind || ""); }
   async function getDetector() {
     if (detectorTried) return detector; detectorTried = true;
