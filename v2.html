@@ -432,6 +432,11 @@
       text: `${what} ${agoText(prev.ts, now)}${prev.who ? " by " + prev.who : ""}. Same box again? Carry on. A different box? Set it aside — two boxes share this label.` };
   }
   // What should happen when a label is scanned during a run. Pure decision; the caller logs and announces it.
+  // The journey, forward only once something has left: 0 packing · 1 aboard · 2 on the way · 3 delivered, not unloaded · 4 arrived · 5 in its room.
+  // Before step 2 a change is a minor correction; from step 2 on, any action that would put the item at an EARLIER step is questioned first.
+  const JOURNEY = { STARTED: 0, READY: 0, SEALED: 0, PACKED: 0, LOADED: 1, RECEIVED: 4, PLACED: 5 };
+  const journeyOf = item => !item || !item.loaded && !item.received ? 0 : item.last && item.last.type === "PLACED" ? 5 : item.received ? 4 : item.phase === "DELIVERED" ? 3 : item.phase === "TRANSIT" ? 2 : 1;
+  const JOURNEY_WORDS = ["packing", "aboard", "on the way", "delivered, not unloaded", "arrived", "in its room"];
   const verbFor = name => (/TRUCK|VAN|TRAILER|LORRY/i.test(name || "") ? "departed" : "picked up");   // pods are picked up; trucks depart
   function runVerdict(item, run, now, cts, confirmed) {
     if (run.type === "SEALED") {
@@ -443,6 +448,10 @@
     }
     if (run.type === "LOADED") {
       if (item && item.loaded && !item.arrived) return repeatVerdict(item.loaded, `Already loaded${item.container ? " in " + item.container : ""}`, "loading", now);
+      if (item && item.received && !confirmed) { const arr = item.history.filter(e => e.type === "RECEIVED" || e.type === "PLACED").pop();
+        return { log: false, ask: "trip", tone: "ask", head: "This one already made its trip",
+          when: `${item.loaded ? `Loaded into ${item.container || "a container"}${item.loaded.wave ? " (" + item.loaded.wave.replace(/^W/, "Wave ") + ")" : ""} ${agoText(item.loaded.ts, now)}${item.loaded.who ? " by " + item.loaded.who : ""}; ` : ""}${arr.type === "PLACED" ? "placed in its room" : "arrived"} ${agoText(arr.ts, now)}${arr.who ? " by " + arr.who : ""}. Loading it again means a second trip — or the wrong label.`,
+          yes: "Load it again — a second trip", no: "Don't load it — check first", note: `second trip: already ${arr.type === "PLACED" ? "placed" : "arrived"}${item.container ? " from " + item.container : ""}` }; }
       if (item && item.plannedWave && run.wave && item.plannedWave !== run.wave) return { log: false, ask: "wave", tone: "ask", planned: item.plannedWave, text: "Planned for a different wave" };   // a person decides: change the plan and load it, or leave it off
       const cont = run.container && cts && cts[run.container];
       if (cont && cont.last && !confirmed) return { log: false, ask: "gone", tone: "ask", container: run.container,
@@ -486,7 +495,7 @@
     field: "", value: "", container: s.container || "", wave: "", location: s.location || "", photo: s.photo || "", note: s.note || "" });
 
   // ---- storage: small things in localStorage (shared with v1), events and photos in IndexedDB ----
-  const APP_VERSION = "Box app 3.5 (2026-09-22)";
+  const APP_VERSION = "Box app 3.6 (2026-09-23)";
   const $ = id => document.getElementById(id);
   const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const store = { get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } },
@@ -899,6 +908,14 @@
     const it = state.items[id], extra = {}, name = `${CLASSWORD[id[0]]} ${id.slice(1)}`;
     if (it && it.last && (it.last.type === cp || (cp === "SEALED" && it.last.type === "PACKED"))) { setStatus(`${name} was already marked “${cpWords[cp]}” ${agoText(it.last.ts)}${it.last.who ? " by " + it.last.who : ""}. Nothing added.`, "ok"); return; }
     if (PACK_STATES.includes(cp) && serverOlderThan(1, 2) && scriptNeedsUpdate("1.2")) return;
+    const cur = journeyOf(it), to = JOURNEY[cp];
+    if (cur >= 2 && to < cur) {                                                                  // it has left: going backwards is questioned
+      const why = cp === "LOADED" ? `${name} already made its trip — it is ${JOURNEY_WORDS[cur]}. Loading it again means a second trip, or the wrong label.` : `${name} is ${JOURNEY_WORDS[cur]}. Marking it “${cpWords[cp]}” would move it backwards in the workflow.`;
+      if (!confirm(`${why}\n\nA mistake in an earlier entry is fixed with Undo, not by marking it again. Record “${cpWords[cp]}” anyway?`)) return;
+      extra.note = `backwards from ${JOURNEY_WORDS[cur]}, confirmed`; }
+    else if ((cp === "RECEIVED" || cp === "PLACED") && cur === 1 && it.container) {           // arriving from a container that never left: the same question the scan session asks
+      if (!confirm(`${it.container} was never marked ${verbFor(it.container)}, and ${name} is still recorded as aboard.\n\nRecord “${cpWords[cp]}” anyway?`)) return;
+      extra.note = `out of turn: ${it.container} not marked ${verbFor(it.container)}`; }
     if (cp === "READY" || cp === "SEALED") { const miss = missingBeforeSeal(it);
       if (miss.length && !confirm(`${name}: ${miss.join(" and ")} yet.\n\n${cp === "SEALED" ? "Once it is taped, adding them means opening it again. Mark it sealed anyway?" : "Mark it ready to seal anyway?"}`)) return; }
     if (cp === "LOADED") { const c = prompt("Which container? (POD1, TRUCK …)", (run && run.container) || lastContainer() || "POD1"); if (c === null) return; extra.container = c.trim().toUpperCase(); extra.wave = (run && run.wave) || ""; }
@@ -1005,8 +1022,8 @@
   }
   $("alarm-ok").onclick = () => { clearInterval(alarmTimer); if (navigator.vibrate) navigator.vibrate(0); $("alarm").hidden = true; blocked = false; lastRunAt = Date.now(); };
   let asking = null;
-  function raiseAsk(id, v) {
-    blocked = true; asking = { id, v }; const name = `${CLASSWORD[id[0]] || id[0]} ${id.slice(1)}`;
+  function raiseAsk(id, v, note) {
+    blocked = true; asking = { id, v, note }; const name = `${CLASSWORD[id[0]] || id[0]} ${id.slice(1)}`;
     $("ask-id").textContent = name;
     if (v.ask === "wave") { $("ask-head").textContent = "Planned for " + waveFull(v.planned, state.names); $("ask-when").textContent = `You are loading ${waveFull(run.wave, state.names)}${run.container ? " into " + run.container : ""}.`;
       $("ask-yes").textContent = `Load it now — change it to ${waveShort(run.wave)}`; $("ask-no").textContent = `Don't load it — it stays ${waveShort(v.planned)}`; }
@@ -1024,14 +1041,14 @@
   $("ask-no").onclick = () => { const a = asking; asking = null; $("ask").hidden = true; blocked = false; lastRunAt = Date.now(); if (a) setStatus(`${CLASSWORD[a.id[0]]} ${a.id.slice(1)}: nothing recorded.`, "ok"); };
   $("ask-yes").onclick = async () => { const a = asking; if (!a || !run) return;
     if (a.v.ask === "wave") { if (serverOlderThan(1, 5)) { scriptNeedsUpdate("1.5"); return; }
-      asking = null; $("ask").hidden = true; blocked = false; await record(mkEvent(cfg.who, a.id, "EDIT", { field: "wave", value: run.wave, note: "changed at the door while loading " + (run.container || "") })); await handleRunScan(a.id, true); return; }
+      asking = null; $("ask").hidden = true; blocked = false; await record(mkEvent(cfg.who, a.id, "EDIT", { field: "wave", value: run.wave, note: "changed at the door while loading " + (run.container || "") })); await handleRunScan(a.id, true, a.note); return; }
     asking = null; $("ask").hidden = true; blocked = false; await handleRunScan(a.id, true, a.v.note);          // recorded with a note saying it was confirmed out of turn
   };
   async function handleRunScan(id, typed, confirmedNote) {
     if (blocked) return;
     const now = Date.now(); if (!typed && id === lastRunHit && now - lastRunAt < 4000) { lastRunAt = now; return; } lastRunHit = id; lastRunAt = now;
     const it = state.items[id], v = runVerdict(it, run, now, state.containers, !!confirmedNote); let ev = null;
-    if (v.ask) { raiseAsk(id, v); return; }
+    if (v.ask) { raiseAsk(id, v, confirmedNote); return; }
     if (v.log) {
       const extra = run.type === "SEALED" ? {} : run.type === "LOADED" ? { container: run.container, wave: run.wave } : { location: it ? (run.type === "PLACED" ? ((it.row.dest || "").trim().toUpperCase() || stageOf(it.row)) : stageOf(it.row)) : "" };
       if (confirmedNote) extra.note = confirmedNote;
