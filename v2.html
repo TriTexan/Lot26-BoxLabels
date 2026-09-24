@@ -140,6 +140,7 @@
   input::placeholder, textarea::placeholder { font-style: italic; color: #a0a0a0; opacity: 1; }   /* an instruction, never mistakable for an entry */
   .label .field input::placeholder, .label .field textarea::placeholder { color: #b0b0b0; }
   #hit .verdict.askmark { background: #fff3cf; color: #6b4e00; font-size: 16px; flex-wrap: wrap; } #hit .verdict.askmark span { flex: 1 1 100%; } #hit .verdict.askmark button { flex: 1 1 auto; } #hit .verdict.askmark #hit-mark { background: #111; color: #fff; }
+  .daylist h3.divider { font-size: 14px; font-weight: 600; color: var(--muted); margin: 10px 0 4px; padding-bottom: 3px; border-bottom: 1px solid var(--line); }
   .sub.warn { color: var(--warn); }
 </style>
 </head>
@@ -501,7 +502,7 @@
     field: "", value: "", container: s.container || "", wave: "", location: s.location || "", photo: s.photo || "", note: s.note || "" });
 
   // ---- storage: small things in localStorage (shared with v1), events and photos in IndexedDB ----
-  const APP_VERSION = "Box app 3.7 (2026-09-23)";
+  const APP_VERSION = "Box app 3.8 (2026-09-23)";
   const $ = id => document.getElementById(id);
   const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const store = { get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } },
@@ -591,6 +592,13 @@
     window.scrollTo({ top: Math.max(0, el.getBoundingClientRect().top + window.scrollY - pad), behavior: smooth ? "smooth" : "auto" }); }
   function wireOpen(root) { root.querySelectorAll("[data-open]").forEach(b => b.onclick = () => { show(b.dataset.open); cardToTop(true); }); }
 
+  // items still aboard, grouped by the wave they were loaded in and then by container — a divider per group, nothing more
+  function groupedTransit(items) {
+    const groups = {}, order = ["W1", "W2", "W3", ""];
+    for (const i of items) { const w = (i.loaded && i.loaded.wave) || "", c = i.container || "(no container noted)", k = w + "\u0000" + c; (groups[k] = groups[k] || { w, c, items: [] }).items.push(i); }
+    return Object.values(groups).sort((a, b) => (order.indexOf(a.w) - order.indexOf(b.w)) || (a.c < b.c ? -1 : a.c > b.c ? 1 : 0));
+  }
+  const transitHeading = g => `${g.w ? esc(waveFull(g.w, state.names)) : "No wave noted"} · ${esc(g.c)}${state.containers[g.c] && state.containers[g.c].last ? " — " + esc(state.containers[g.c].last.type === "DEPARTED" ? verbFor(g.c) : state.containers[g.c].last.type === "DELIVERED" ? "delivered" : "returned to shipper") : ""}`;
   function renderDayLists() {
     const el = $("daylists"); if (!run) { el.innerHTML = ""; return; }
     let h = "";
@@ -601,8 +609,8 @@
         : `<div class="daylist done">Every “Must go” item is loaded.</div>`;
       if (lists.canGo.length) h += `<div class="daylist"><h2>Can go if there's room (${lists.canGo.length})</h2>${idButtons(lists.canGo)}</div>`;
     } else if (run.type === "RECEIVED") {
-      const keys = Object.keys(lists.byContainer).sort();
-      h += keys.length ? keys.map(k => `<div class="daylist"><h2>${esc(k)} — loaded, not checked in yet (${lists.byContainer[k].length})</h2>${idButtons(lists.byContainer[k])}</div>`).join("")
+      const gs = groupedTransit(lists.inTransit);
+      h += gs.length ? `<div class="daylist"><h2>Loaded, not checked in yet (${lists.inTransit.length})</h2>${gs.map(g => `<h3 class="divider">${transitHeading(g)} (${g.items.length})</h3>${idButtons(g.items)}`).join("")}</div>`
         : `<div class="daylist done">Everything that was loaded has been checked in.</div>`;
     }
     el.innerHTML = h; wireOpen(el);
@@ -628,7 +636,7 @@
       ${lists.packing.length ? `<div class="daylist"><h2>Packing in progress (${lists.packing.length})</h2>${idButtons(lists.packing)}</div>` : ""}
       ${lists.containers.length ? `<div class="daylist"><h2>Pods and trucks</h2>${lists.containers.map(containerCard).join("")}</div>` : ""}
       ${lists.mustNotLoaded.length ? `<div class="daylist"><h2>Must go — not loaded yet (${lists.mustNotLoaded.length})</h2>${idButtons(lists.mustNotLoaded)}</div>` : ""}
-      ${lists.inTransit.length ? `<div class="daylist"><h2>Loaded, not checked in (${lists.inTransit.length})</h2>${idButtons(lists.inTransit)}</div>` : ""}
+      ${lists.inTransit.length ? `<div class="daylist"><h2>Loaded, not checked in (${lists.inTransit.length})</h2>${groupedTransit(lists.inTransit).map(g => `<h3 class="divider">${transitHeading(g)} (${g.items.length})</h3>${idButtons(g.items)}`).join("")}</div>` : ""}
       <p class="note">${APP_VERSION}</p>`;
     wireOpen(el);
     el.querySelectorAll("[data-cmark]").forEach(b => b.onclick = () => markContainer(b.dataset.c, b.dataset.cmark));
