@@ -166,8 +166,8 @@
     <div class="alarm-id" id="alarm-id"></div>
     <div class="alarm-head" id="alarm-head"></div>
     <div class="alarm-when" id="alarm-when"></div>
-    <p>Not counted. Scanning is paused.</p>
-    <p><b>Same box scanned twice?</b> Nothing to do.<br><b>A different box?</b> Set it aside — two boxes share this label. It needs a new number and new labels.</p>
+    <p id="alarm-p1">Not counted. Scanning is paused.</p>
+    <p id="alarm-p2"><b>Same box scanned twice?</b> Nothing to do.<br><b>A different box?</b> Set it aside — two boxes share this label. It needs a new number and new labels.</p>
     <button id="alarm-ok">OK — carry on scanning</button>
   </div>
 </div>
@@ -303,7 +303,7 @@
   const MOVE_STATES = ["LOADED", "RECEIVED", "PLACED"];
   const CHECKPOINTS = PACK_STATES.concat(["PACKED"], MOVE_STATES);
   const isSealed = it => !!(it && it.last && (it.last.type === "SEALED" || it.last.type === "PACKED"));
-  const CONTAINER_TYPES = ["DEPARTED", "DELIVERED"];            // about a whole pod or truck; they carry a container name and no item id
+  const CONTAINER_TYPES = ["DEPARTED", "DELIVERED", "RETURNED"];   // about a whole pod or truck; they carry a container name and no item id. Used once: none → departed → delivered → returned to shipper
   const EV_COLS = ["event_id", "ts", "who", "id", "type", "field", "value", "container", "wave", "location", "photo", "note"];
   // Waves are stable codes in the data (W1, W2, W3). What people CALL them is a display name: changeable at any time, changing no record.
   const WAVE_DEFAULTS = { W1: "the Pre-Pod", W2: "the main move", W3: "after the sale" };
@@ -354,6 +354,7 @@
     const box = name => containers[name] || (containers[name] = { name, events: [], wave: "", loaded: 0, checkedIn: 0 });
     for (const r of (rows || [])) { const id = (r.id || "").trim().toUpperCase(); if (id) { const it = get(id); it.base = r; it.unknown = false; } }
     for (const e of events) {
+      if (e.type === "UNDO" && !e.id && e.container) { box(e.container).undoTs = e.ts; continue; }   // an undo of a container mark: one step back, and no second step until a new mark is made
       if (e.type === "UNDO" || undone.has(e.event_id)) continue;
       if (e.type === "NAME") { names[e.field] = e.value || ""; continue; }                // last one wins; events are oldest-first
       if (CONTAINER_TYPES.includes(e.type)) { if (e.container) box(e.container).events.push(e); continue; }
@@ -384,7 +385,9 @@
           if (first && wasAway && (!c.evidentTs || first.ts < c.evidentTs)) { c.evidentTs = first.ts; c.evidentWho = first.who || ""; }
           if (first && !wasAway) c.outOfTurn = (c.outOfTurn || 0) + 1; } }
     }
-    for (const c of Object.values(containers)) c.last = c.events.length ? c.events[c.events.length - 1] : null;
+    for (const c of Object.values(containers)) { c.last = c.events.length ? c.events[c.events.length - 1] : null;
+      c.returned = !!(c.last && c.last.type === "RETURNED"); c.used = !!c.last;                           // used = marked at least once: never a loading target again
+      c.undoLocked = !!(c.undoTs && (!c.last || c.undoTs > c.last.ts)); }
     for (const it of Object.values(items)) {
       const c = it.loaded && it.container ? containers[it.container] : null, after = t => c && c.events.filter(e => e.type === t && e.ts > it.loaded.ts).pop();
       it.departed = after("DEPARTED") || null; it.delivered = after("DELIVERED") || null;
@@ -447,21 +450,24 @@
       return { log: true, tone: "ok", text: "Sealed" };
     }
     if (run.type === "LOADED") {
+      const cont = run.container && cts && cts[run.container];                            // a used container is refused before any other question: no answer could proceed
+      if (cont && cont.used) return { log: false, tone: "alert", head: `${run.container} has already been ${cont.last.type === "DEPARTED" ? verbFor(run.container) : cont.last.type === "DELIVERED" ? "delivered" : "returned to the shipper"}`,
+        when: `${agoText(cont.last.ts, now)}${cont.last.who ? " by " + cont.last.who : ""}. A container is used once — nothing can be loaded into it now. Finish this session and start one with a new name.`, text: "Container already used" };
       if (item && item.loaded && !item.arrived) return repeatVerdict(item.loaded, `Already loaded${item.container ? " in " + item.container : ""}`, "loading", now);
       if (item && item.received && !confirmed) { const arr = item.history.filter(e => e.type === "RECEIVED" || e.type === "PLACED").pop();
         return { log: false, ask: "trip", tone: "ask", head: "This one already made its trip",
           when: `${item.loaded ? `Loaded into ${item.container || "a container"}${item.loaded.wave ? " (" + item.loaded.wave.replace(/^W/, "Wave ") + ")" : ""} ${agoText(item.loaded.ts, now)}${item.loaded.who ? " by " + item.loaded.who : ""}; ` : ""}${arr.type === "PLACED" ? "placed in its room" : "arrived"} ${agoText(arr.ts, now)}${arr.who ? " by " + arr.who : ""}. Loading it again means a second trip — or the wrong label.`,
           yes: "Load it again — a second trip", no: "Don't load it — check first", note: `second trip: already ${arr.type === "PLACED" ? "placed" : "arrived"}${item.container ? " from " + item.container : ""}` }; }
       if (item && item.plannedWave && run.wave && item.plannedWave !== run.wave) return { log: false, ask: "wave", tone: "ask", planned: item.plannedWave, text: "Planned for a different wave" };   // a person decides: change the plan and load it, or leave it off
-      const cont = run.container && cts && cts[run.container];
-      if (cont && cont.last && !confirmed) return { log: false, ask: "gone", tone: "ask", container: run.container,
-        head: `${run.container} was marked ${cont.last.type === "DEPARTED" ? verbFor(run.container) : "delivered"} ${agoText(cont.last.ts, now)}`, when: "Loading into it now would put this box on a container that is already on its way or delivered.",
-        yes: "Load it anyway — a later trip", no: "Don't load it — check first", note: `out of turn: ${run.container} already marked ${cont.last.type.toLowerCase()}` };
+
       if (item && item.id[0] === "B" && !isSealed(item)) return { log: true, tone: "warn", text: "Loaded — it was never marked sealed" };   // boxes only; furniture and equipment are not sealed
       return { log: true, tone: "ok", text: "Loaded" };
     }
     if (run.type === "RECEIVED" || run.type === "PLACED") {
       const cont = item && item.loaded && item.container && cts && cts[item.container];
+      if (cont && cont.returned && !item.arrived && !confirmed) return { log: false, ask: "returned", tone: "ask", container: item.container,
+        head: `${item.container} was returned to the shipper ${agoText(cont.last.ts, now)}`, when: `This box is still recorded aboard it. Either it came out without a scan, or it went back with the container.`,
+        yes: run.type === "PLACED" ? "Placed anyway — record it" : "Arrived anyway — record it", no: "Don't record — check first", note: `out of turn: ${item.container} already returned to shipper` };
       if (cont && !item.arrived && !item.departed && !item.delivered && !confirmed) return { log: false, ask: "notleft", tone: "ask", container: item.container,
         head: `${item.container} was never marked ${verbFor(item.container)}`, when: `Loaded in it ${agoText(item.loaded.ts, now)}${item.loaded.who ? " by " + item.loaded.who : ""}.`,
         alt: `Mark ${item.container} ${verbFor(item.container)} and delivered now, then record`,
@@ -495,7 +501,7 @@
     field: "", value: "", container: s.container || "", wave: "", location: s.location || "", photo: s.photo || "", note: s.note || "" });
 
   // ---- storage: small things in localStorage (shared with v1), events and photos in IndexedDB ----
-  const APP_VERSION = "Box app 3.6 (2026-09-23)";
+  const APP_VERSION = "Box app 3.7 (2026-09-23)";
   const $ = id => document.getElementById(id);
   const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const store = { get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } },
@@ -629,32 +635,34 @@
     el.querySelectorAll("[data-cundo]").forEach(b => b.onclick = () => undoContainer(b.dataset.c));
   }
   // One entry for the whole pod or truck. The item-by-item scans stay the audit record; this only says where the container is.
-  const containerWords = { DEPARTED: "on the way", DELIVERED: "delivered" };
-  const markWord = (name, type) => (type === "DELIVERED" ? "delivered" : verbFor(name));
+  const containerWords = { DEPARTED: "on the way", DELIVERED: "delivered", RETURNED: "returned to shipper" };
+  const markWord = (name, type) => (type === "DELIVERED" ? "delivered" : type === "RETURNED" ? "returned to shipper" : verbFor(name));
   function containerCard(c) {
-    const evident = c.evidentTs && !(c.last && c.last.type === "DELIVERED");
+    const evident = !!(c.evidentTs && c.last && c.last.type === "DEPARTED");     // "evidently delivered" only while it is still marked as on the way
     const st = evident ? `evidently delivered — ${c.checkedIn} box${c.checkedIn === 1 ? "" : "es"} from it checked in at the other end since ${whenText(c.evidentTs)}${c.evidentWho ? " (" + esc(c.evidentWho) + ")" : ""}; not marked`
-      : c.last ? `${c.last.type === "DEPARTED" ? verbFor(c.name) + " — on the way" : "delivered"} since ${whenText(c.last.ts)}${c.last.who ? " (" + esc(c.last.who) + ")" : ""}` : `still here — not marked ${verbFor(c.name)} yet`;
-    const next = evident ? ["DELIVERED", `Mark ${esc(c.name)} as delivered`] : !c.last ? ["DEPARTED", `Mark ${esc(c.name)} as ${verbFor(c.name)}`] : c.last.type === "DEPARTED" ? ["DELIVERED", `Mark ${esc(c.name)} as delivered`] : null;
+      : c.last ? `${c.last.type === "DEPARTED" ? verbFor(c.name) + " — on the way" : c.last.type === "DELIVERED" ? "delivered" : "returned to shipper — finished"} since ${whenText(c.last.ts)}${c.last.who ? " (" + esc(c.last.who) + ")" : ""}` : `still here — not marked ${verbFor(c.name)} yet`;
+    const next = evident ? ["DELIVERED", `Mark ${esc(c.name)} as delivered`] : !c.last ? ["DEPARTED", `Mark ${esc(c.name)} as ${verbFor(c.name)}`] : c.last.type === "DEPARTED" ? ["DELIVERED", `Mark ${esc(c.name)} as delivered`] : c.last.type === "DELIVERED" ? ["RETURNED", `Mark ${esc(c.name)} as returned to shipper`] : null;
     const aboard = c.loaded - c.checkedIn, na = c.notAboard || [];
     return `<div class="panel" style="margin-top:8px"><p class="ptitle">${esc(c.name)}${c.wave ? " · " + esc(waveFull(c.wave, state.names)) : ""}</p>
       <p style="margin:0 0 4px;font-size:17px"><b>Status:</b> ${st}</p>
       <p class="note" style="margin:0 0 6px;font-size:15px">${c.loaded} loaded · ${aboard} still aboard · ${c.checkedIn} checked in at the other end</p>
+      ${c.returned && aboard ? `<p class="note warn" style="margin:0 0 6px">${aboard} box${aboard === 1 ? "" : "es"} loaded into ${esc(c.name)} ${aboard === 1 ? "was" : "were"} never checked in and the container has gone back — ${aboard === 1 ? "it is" : "they are"} missing unless ${aboard === 1 ? "it" : "they"} came out without a scan. See "Loaded, not checked in".</p>` : ""}
       ${c.outOfTurn ? `<p class="note warn" style="margin:0 0 6px">${c.outOfTurn} box${c.outOfTurn === 1 ? " was" : "es were"} checked in at the other end although ${esc(c.name)} was never marked ${verbFor(c.name)} — someone confirmed it out of turn; check the records.</p>` : ""}
       ${!c.last && c.wave ? (na.length ? `<details style="margin:0 0 8px"><summary class="note warn" style="cursor:pointer">Planned for ${esc(waveShort(c.wave))} but not aboard: ${na.length} — check before it leaves</summary>${idButtons(na)}</details>` : `<p class="note" style="margin:0 0 8px;color:var(--ok)">Everything planned for ${esc(waveShort(c.wave))} is aboard.</p>`) : ""}
 
-      <div class="row">${next ? `<button data-c="${esc(c.name)}" data-cmark="${next[0]}">${next[1]}</button>` : ""}${c.last ? `<button class="quiet" data-c="${esc(c.name)}" data-cundo="1">Undo “${markWord(c.name, c.last.type)}”</button>` : ""}</div></div>`;
+      <div class="row">${next ? `<button data-c="${esc(c.name)}" data-cmark="${next[0]}">${next[1]}</button>` : ""}${c.last && !c.undoLocked ? `<button class="quiet" data-c="${esc(c.name)}" data-cundo="1">Undo “${markWord(c.name, c.last.type)}”</button>` : ""}</div>${c.undoLocked ? `<p class="note" style="margin:8px 0 0">Undone once. A correction goes back one step only; for anything bigger, ask the design chat.</p>` : ""}</div>`;
   }
   async function markContainer(name, type) {
     const c = state.containers[name]; if (!c) return;
-    if (serverOlderThan(1, 1) && scriptNeedsUpdate("1.1")) return;
+    if (serverOlderThan(1, type === "RETURNED" ? 6 : 1) && scriptNeedsUpdate(type === "RETURNED" ? "1.6" : "1.1")) return;
     const n = c.loaded - c.checkedIn;
     const na = (c.notAboard || []).length;
-    if (!confirm(type === "DEPARTED" ? `Mark ${name} as ${verbFor(name)} and on its way?\n\n${n} item${n === 1 ? " is" : "s are"} aboard.${na ? `\n${na} box${na === 1 ? "" : "es"} planned for ${waveShort(c.wave)} ${na === 1 ? "is" : "are"} NOT aboard and will stay behind — check the list on the card first.` : ""}` : `Mark ${name} as delivered?\n\n${n} item${n === 1 ? "" : "s"} still to unload and check in.`)) return;
-    await record(mkEvent(cfg.who, "", type, { container: name, wave: c.wave || "" })); setStatus(`${name}: ${type === "DEPARTED" ? verbFor(name) + " — on the way" : "delivered"}.`, "ok");
+    if (type === "RETURNED" && !confirm(`Mark ${name} as returned to the shipper?\n\nThis ends its use.${n ? `\n${n} box${n === 1 ? " is" : "es are"} still recorded aboard and never checked in — ${n === 1 ? "it" : "they"} will be listed as missing.` : " Everything loaded into it has been checked in."}`)) return;
+    if (type !== "RETURNED" && !confirm(type === "DEPARTED" ? `Mark ${name} as ${verbFor(name)} and on its way?\n\n${n} item${n === 1 ? " is" : "s are"} aboard.${na ? `\n${na} box${na === 1 ? "" : "es"} planned for ${waveShort(c.wave)} ${na === 1 ? "is" : "are"} NOT aboard and will stay behind — check the list on the card first.` : ""}` : `Mark ${name} as delivered?\n\n${n} item${n === 1 ? "" : "s"} still to unload and check in.`)) return;
+    await record(mkEvent(cfg.who, "", type, { container: name, wave: c.wave || "" })); setStatus(`${name}: ${type === "DEPARTED" ? verbFor(name) + " — on the way" : type === "DELIVERED" ? "delivered" : "returned to shipper"}.`, "ok");
   }
   async function undoContainer(name) {
-    const c = state.containers[name]; if (!c || !c.last || !confirm(`Undo “${markWord(name, c.last.type)}” for ${name}?`)) return;
+    const c = state.containers[name]; if (!c || !c.last || c.undoLocked || !confirm(`Undo “${markWord(name, c.last.type)}” for ${name}?\n\nThis goes back one step; a second undo is not offered.`)) return;
     await record(mkEvent(cfg.who, "", "UNDO", { value: c.last.event_id, container: name })); setStatus("Undone.", "ok");
   }
 
@@ -986,7 +994,7 @@
   function renderModes() { $("main-actions").hidden = !!run || !!browse; $("browsebar").hidden = !browse || !!run; $("btn-browse").classList.toggle("on", !$("browse-setup").hidden); $("btn-scan").classList.toggle("on", scanning && !run); $("btn-scan").textContent = scanning && !run ? "Stop scanning" : "Scan Single Label"; $("btn-run").classList.toggle("on", !$("run-setup").hidden); }
   function fillRunChoices() {
     $("run-wave").innerHTML = ["W1", "W2", "W3"].map(w => `<option value="${w}">${esc(waveFull(w, state.names))}</option>`).join("") + `<option value="">Not decided</option>`;
-    const known = Array.from(new Set(mergeEvents(server, local).filter(e => e.type === "LOADED" && !state.undone.has(e.event_id)).map(e => e.container).filter(Boolean)));
+    const known = Object.values(state.containers).filter(c => c.loaded && !c.used).map(c => c.name).sort();          // still being loaded; a container marked anything is finished as a target
     $("run-known-label").hidden = !known.length; $("run-known").innerHTML = known.map(c => `<button class="quiet" data-known="${esc(c)}">${esc(c)}</button>`).join("");
     $("run-known").querySelectorAll("button").forEach(b => b.onclick = () => { $("run-container").value = b.dataset.known; $("run-known").querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b)); runStartReady(); });
   }
@@ -1002,6 +1010,8 @@
     if (pickedType === "SEALED" && serverOlderThan(1, 2) && scriptNeedsUpdate("1.2")) return;
     const container = $("run-container").value.trim().toUpperCase();
     if (pickedType === "LOADED" && !container) { setStatus("Name the container first — POD1, TRUCK …", "warn"); $("run-container").focus(); return; }
+    const used = pickedType === "LOADED" && state.containers[container] && state.containers[container].used;
+    if (used) { const u = state.containers[container]; setStatus(`${container} has already been ${u.last.type === "DEPARTED" ? verbFor(container) : u.last.type === "DELIVERED" ? "delivered" : "returned to the shipper"} (${whenText(u.last.ts)}). A container is used once — give this one a new name.`, "warn"); $("run-container").focus(); return; }
     run = { type: pickedType, container: pickedType === "LOADED" ? container : "", wave: pickedType === "LOADED" ? $("run-wave").value : "", count: 0 };
     store.set("lot26.run", run); $("run-setup").hidden = true; currentId = null; $("result").innerHTML = ""; recompute(); beepInit(); if (!scanning) startScan();
   };
@@ -1016,7 +1026,7 @@
   let lastRunHit = "", lastRunAt = 0, blocked = false, alarmTimer = null;
   function raiseAlarm(id, v) {
     blocked = true; $("alarm-id").textContent = `${CLASSWORD[id[0]] || id[0]} ${id.slice(1)}`; $("alarm-head").textContent = v.head || v.text; $("alarm-when").textContent = v.when || "";
-    $("alarm").hidden = false; $("alarm-ok").focus();
+    $("alarm-p2").hidden = v.text === "Container already used"; $("alarm").hidden = false; $("alarm-ok").focus();
     let n = 0; const sound = () => { [0, 240, 480].forEach((d, i) => setTimeout(() => beep(i % 2 ? "dup" : "warn"), d)); if (navigator.vibrate) navigator.vibrate([300, 100, 300, 100, 300]); if (++n >= 8) clearInterval(alarmTimer); };
     sound(); clearInterval(alarmTimer); alarmTimer = setInterval(sound, 2500);                     // keeps sounding until someone answers it
   }
@@ -1065,7 +1075,7 @@
       $("hit-notnow").onclick = () => { h.querySelector(".askmark").remove(); }; }
     if (ev) $("hit-undo").onclick = async () => { await record(mkEvent(cfg.who, id, "UNDO", { value: ev.event_id })); run.count = Math.max(0, run.count - 1); store.set("lot26.run", run); renderRun(); h.className = "dup"; h.querySelector(".verdict span").textContent = "Undone — not recorded"; $("hit-undo").remove(); lastRunHit = ""; };
     $("hit-open").onclick = () => { show(id); cardToTop(true); };
-    if (tone === "alert") raiseAlarm(id, v);
+    if (tone === "alert") { raiseAlarm(id, v); if (v.text === "Container already used") { $("alarm-ok").textContent = "OK — finish this session"; } else $("alarm-ok").textContent = "OK — carry on scanning"; }
     else { beep(tone); if (navigator.vibrate) navigator.vibrate(tone === "ok" ? 60 : tone === "dup" ? [40, 60, 40] : [120, 60, 120]); }
   }
   let audio = null;
