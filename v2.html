@@ -376,11 +376,11 @@
       if (it.loaded) { if (it.loaded.wave) it.row.wave = it.loaded.wave; it.container = it.loaded.container || ""; }
       // planned wave: what we THINK it travels in (set on the card, or from inventory). Once loaded, the wave it was actually loaded in is the fact.
       const pw = ((it.edits.wave != null ? it.edits.wave : ((it.base || {}).wave || "")) || "").trim().toUpperCase(); it.plannedWave = WAVES.includes(pw) ? pw : "";
-      if (!it.loaded) it.row.wave = it.plannedWave;
+      it.row.wave = (it.loaded && it.loaded.wave) || it.plannedWave;
       it.w1 = it.plannedWave === "W1" && W1_WORDS[(it.row.w1 || "").trim().toUpperCase()] ? (it.row.w1 || "").trim().toUpperCase() : "";
       // Where is a loaded item? Only a container event made AFTER this item went in counts for it (a container name can be reused for a later trip).
       const c = it.loaded && it.container ? box(it.container) : null;
-      if (c) { c.loaded++; if (it.loaded.wave) c.wave = it.loaded.wave;
+      if (c) { c.loaded++; if (it.loaded.wave) c.wave = it.loaded.wave; else if (!c.wave && it.plannedWave) c.wave = it.plannedWave;   // a load made without a session wave: the plan stands in
         if (it.arrived) { c.checkedIn++; const first = cps.find(e => (e.type === "RECEIVED" || e.type === "PLACED") && e.ts > it.loaded.ts);
           const wasAway = first && c.events.some(e => e.type === "DEPARTED" && e.ts > it.loaded.ts && e.ts < first.ts);   // only a container that was on its way can evidently have been delivered
           if (first && wasAway && (!c.evidentTs || first.ts < c.evidentTs)) { c.evidentTs = first.ts; c.evidentWho = first.who || ""; }
@@ -399,7 +399,7 @@
   }
 
   // The three lists that matter on a loading or unloading day.
-  const waveOf = i => (i.loaded ? (i.loaded.wave || "") : i.plannedWave);
+  const waveOf = i => ((i.loaded && i.loaded.wave) || i.plannedWave || "");          // the wave it was loaded in; failing that, the plan
   const stateOf = i => (i.received ? "IN" : i.loaded ? i.phase : "NOTLOADED");           // one current state per item, whatever its history
   function dayLists(state) {
     const all = Object.values(state.items).sort((a, b) => (a.id < b.id ? -1 : 1));
@@ -502,7 +502,7 @@
     field: "", value: "", container: s.container || "", wave: "", location: s.location || "", photo: s.photo || "", note: s.note || "" });
 
   // ---- storage: small things in localStorage (shared with v1), events and photos in IndexedDB ----
-  const APP_VERSION = "Box app 3.8 (2026-09-23)";
+  const APP_VERSION = "Box app 3.9 (2026-09-24)";
   const $ = id => document.getElementById(id);
   const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const store = { get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } },
@@ -864,9 +864,9 @@
           ${labelChanged ? `<p class="note" style="color:#555">Label text was changed after the first label was printed — the remaining labels will carry it.</p>` : ""}
           ${fields.length ? `<dl>${fields.map(([k, v]) => `<dt>${k}</dt><dd>${esc(v)}</dd>`).join("")}</dl>` : ""}
           <div class="edit">
-            ${it && it.loaded ? "" : `<div class="elabel">Which wave is it planned for?</div>
+            ${it && it.loaded && it.loaded.wave ? "" : `<div class="elabel">Which wave is it planned for?</div>
             <div class="chips">${WAVES.map(w => `<button class="quiet ${pw === w ? "on" : ""}" data-wave="${w}">${esc(waveFull(w, state.names))}</button>`).join("")}</div>`}
-            ${pw === "W1" && !(it && it.loaded) ? `<div class="elabel">Going in ${esc(waveName("W1"))}?</div>
+            ${pw === "W1" && !(it && it.loaded && it.loaded.wave) ? `<div class="elabel">Going in ${esc(waveName("W1"))}?</div>
             <div class="chips">${Object.keys(W1_WORDS).map(k => `<button class="quiet ${w1 === k ? "on" : ""}" data-w1="${k}">${W1_WORDS[k]}</button>`).join("")}</div>` : ""}
             ${!(base.dest || "").trim() ? `<label class="field">Final location written on this label<select id="ed-dest"><option value="">— choose —</option>${DEST_CHOICES.map(d => `<option value="${d}" ${d === dest ? "selected" : ""}>${esc(disp(d))}</option>`).join("")}</select></label>` : ""}
             <label class="field">What's inside — kept off the label<textarea id="ed-uc" rows="3">${esc(uc)}</textarea></label>
@@ -934,7 +934,10 @@
       extra.note = `out of turn: ${it.container} not marked ${verbFor(it.container)}`; }
     if (cp === "READY" || cp === "SEALED") { const miss = missingBeforeSeal(it);
       if (miss.length && !confirm(`${name}: ${miss.join(" and ")} yet.\n\n${cp === "SEALED" ? "Once it is taped, adding them means opening it again. Mark it sealed anyway?" : "Mark it ready to seal anyway?"}`)) return; }
-    if (cp === "LOADED") { const c = prompt("Which container? (POD1, TRUCK …)", (run && run.container) || lastContainer() || "POD1"); if (c === null) return; extra.container = c.trim().toUpperCase(); extra.wave = (run && run.wave) || ""; }
+    if (cp === "LOADED") { const c = prompt("Which container? (POD1, TRUCK …)", (run && run.container) || lastContainer() || ""); if (c === null) return; const cn = c.trim().toUpperCase();
+      if (!cn) { setStatus("Name the container first.", "warn"); return; }
+      const u = state.containers[cn]; if (u && u.used) { setStatus(`${cn} has already been ${u.last.type === "DEPARTED" ? verbFor(cn) : u.last.type === "DELIVERED" ? "delivered" : "returned to the shipper"} (${whenText(u.last.ts)}). A container is used once — give this one a new name.`, "warn"); return; }
+      extra.container = cn; extra.wave = (run && run.wave) || (it ? it.plannedWave : "") || ""; }
     if (cp === "RECEIVED") extra.location = it ? stageOf(it.row) : "";
     if (cp === "PLACED") extra.location = it ? ((it.row.dest || "").trim().toUpperCase() || stageOf(it.row)) : "";
     const d = dirty; await record(mkEvent(cfg.who, id, cp, extra)); show(id, d ? keep : null);
