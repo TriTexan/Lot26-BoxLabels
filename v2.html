@@ -141,6 +141,15 @@
   .label .field input::placeholder, .label .field textarea::placeholder { color: #b0b0b0; }
   #hit .verdict.askmark { background: #fff3cf; color: #6b4e00; font-size: 16px; flex-wrap: wrap; } #hit .verdict.askmark span { flex: 1 1 100%; } #hit .verdict.askmark button { flex: 1 1 auto; } #hit .verdict.askmark #hit-mark { background: #111; color: #fff; }
   .daylist h3.divider { font-size: 14px; font-weight: 600; color: var(--muted); margin: 10px 0 4px; padding-bottom: 3px; border-bottom: 1px solid var(--line); }
+  #pick { position: fixed; inset: 0; z-index: 30; display: flex; align-items: center; justify-content: center; padding: 18px; box-sizing: border-box; overflow-y: auto; background: rgba(0, 0, 0, .78); }
+  #pick .pick-box { width: 100%; max-width: 520px; margin: auto 0; box-sizing: border-box; background: #fff; color: #111; border-radius: 16px; padding: 20px; border: 4px solid #111; text-align: left; font-size: 17px; line-height: 1.4; }
+  #pick .alarm-id { font-size: clamp(30px, 9vw, 44px); font-weight: 800; line-height: 1; text-align: center; } #pick .pick-head { font-size: 20px; font-weight: 800; margin-top: 8px; text-align: center; }
+  #pick .elabel { font-size: 14px; color: var(--muted); margin-top: 12px; } #pick .chips { margin-top: 6px; }
+  #pick .chips button { background: #f3f3f3; color: #111; border: 1px solid #d0d0d0; } #pick .chips button.on { background: #111; color: #fff; border-color: #111; }
+  #pick .field { color: #555; } #pick .field input, #pick .field select { background: #fff; color: #111; border-color: #ccc; }
+  #pick .pick-note { margin-top: 12px; padding: 10px 12px; border-radius: 10px; background: #fff4d6; color: #6b4e00; font-size: 15px; } #pick .pick-note.bad { background: #fde3e3; color: #8a1020; }
+  #pick button { width: 100%; margin-top: 12px; font-size: 18px; padding: 15px; } #pick .chips button { width: auto; margin-top: 0; font-size: 16px; padding: 10px 14px; }
+  #pick #pick-yes { background: #111; color: #fff; } #pick #pick-no { background: #f3f3f3; color: #111; border: 1px solid #ccc; }
   .sub.warn { color: var(--warn); }
 </style>
 </head>
@@ -160,6 +169,19 @@
     <button id="ask-alt" hidden></button>
     <button id="ask-yes" class="quiet"></button>
     <button id="ask-no" class="quiet"></button>
+  </div>
+</div>
+<div id="pick" hidden role="dialog" aria-modal="true">
+  <div class="pick-box">
+    <div class="alarm-id" id="pick-id"></div>
+    <div class="pick-head">Which container is it going into?</div>
+    <div class="elabel" id="pick-known-label" hidden>Already being loaded — tap to pick</div>
+    <div class="chips" id="pick-known"></div>
+    <label class="field"><span id="pick-container-label">Type a name (POD1, TRUCK …); a new name starts a new container</span><input id="pick-container" type="text" placeholder="type a name for it" autocomplete="off" autocapitalize="characters" enterkeyhint="done"></label>
+    <label class="field">Wave it is loaded in<select id="pick-wave"></select></label>
+    <div class="pick-note" id="pick-note" hidden></div>
+    <button id="pick-yes">Loaded — record it</button>
+    <button id="pick-no" class="quiet">Cancel — nothing recorded</button>
   </div>
 </div>
 <div id="alarm" hidden role="alertdialog" aria-modal="true">
@@ -442,6 +464,7 @@
   const journeyOf = item => !item || !item.loaded && !item.received ? 0 : item.last && item.last.type === "PLACED" ? 5 : item.received ? 4 : item.phase === "DELIVERED" ? 3 : item.phase === "TRANSIT" ? 2 : 1;
   const JOURNEY_WORDS = ["packing", "aboard", "on the way", "delivered, not unloaded", "arrived", "in its room"];
   const verbFor = name => (/TRUCK|VAN|TRAILER|LORRY/i.test(name || "") ? "departed" : "picked up");   // pods are picked up; trucks depart
+  const CONTAINER_RE = /^[A-Z0-9][A-Z0-9 _-]{0,29}$/;   // the same rule the Drive script applies to a pod or truck name when it is marked; checked at loading so no container can be named in a way the script will later refuse
   function runVerdict(item, run, now, cts, confirmed) {
     if (run.type === "SEALED") {
       if (item && item.loaded) return repeatVerdict(item.loaded, `Already loaded${item.container ? " in " + item.container : ""}`, "sealing", now);
@@ -502,7 +525,7 @@
     field: "", value: "", container: s.container || "", wave: "", location: s.location || "", photo: s.photo || "", note: s.note || "" });
 
   // ---- storage: small things in localStorage (shared with v1), events and photos in IndexedDB ----
-  const APP_VERSION = "Box app 3.9 (2026-09-24)";
+  const APP_VERSION = "Box app 3.10 (2026-09-24)";
   const $ = id => document.getElementById(id);
   const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const store = { get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } },
@@ -934,16 +957,61 @@
       extra.note = `out of turn: ${it.container} not marked ${verbFor(it.container)}`; }
     if (cp === "READY" || cp === "SEALED") { const miss = missingBeforeSeal(it);
       if (miss.length && !confirm(`${name}: ${miss.join(" and ")} yet.\n\n${cp === "SEALED" ? "Once it is taped, adding them means opening it again. Mark it sealed anyway?" : "Mark it ready to seal anyway?"}`)) return; }
-    if (cp === "LOADED") { const c = prompt("Which container? (POD1, TRUCK …)", (run && run.container) || lastContainer() || ""); if (c === null) return; const cn = c.trim().toUpperCase();
-      if (!cn) { setStatus("Name the container first.", "warn"); return; }
-      const u = state.containers[cn]; if (u && u.used) { setStatus(`${cn} has already been ${u.last.type === "DEPARTED" ? verbFor(cn) : u.last.type === "DELIVERED" ? "delivered" : "returned to the shipper"} (${whenText(u.last.ts)}). A container is used once — give this one a new name.`, "warn"); return; }
-      extra.container = cn; extra.wave = (run && run.wave) || (it ? it.plannedWave : "") || ""; }
+    if (cp === "LOADED") {                                                                  // the same choice a loading session offers: a container still being loaded, or a new name
+      const pk = await pickContainer(id, it);
+      if (!pk) { setStatus(`${name}: nothing recorded.`, "ok"); return; }
+      extra.container = pk.container; extra.wave = pk.wave;
+      if (it && it.plannedWave && pk.wave && pk.wave !== it.plannedWave)                       // as at the door: the wave it is loaded in becomes the plan, with a note saying so
+        await record(mkEvent(cfg.who, id, "EDIT", { field: "wave", value: pk.wave, note: "changed on the card while loading " + pk.container })); }
     if (cp === "RECEIVED") extra.location = it ? stageOf(it.row) : "";
     if (cp === "PLACED") extra.location = it ? ((it.row.dest || "").trim().toUpperCase() || stageOf(it.row)) : "";
     const d = dirty; await record(mkEvent(cfg.who, id, cp, extra)); show(id, d ? keep : null);
     setStatus(`${CLASSWORD[id[0]]} ${id.slice(1)}: ${cpWords[cp].toLowerCase()} recorded.`, "ok");
   }
   const lastContainer = () => { const all = mergeEvents(server, local); for (let i = all.length - 1; i >= 0; i--) if (all[i].container) return all[i].container; return ""; };
+  const usedText = c => `${c.name} has already been ${c.last.type === "DEPARTED" ? verbFor(c.name) : c.last.type === "DELIVERED" ? "delivered" : "returned to the shipper"} (${whenText(c.last.ts)}). A container is used once — give this one a new name.`;
+  const loadingTargets = () => Object.values(state.containers).filter(c => c.loaded && !c.used).sort((a, b) => a.name.localeCompare(b.name));   // still being loaded; a container marked anything is finished as a target
+
+  // ---- "Which container?" for the card's Loaded: chips for containers still being loaded (each with its wave), or a new name; the wave is shown, never assumed ----
+  let picking = null;
+  function pickContainer(id, it) {
+    return new Promise(resolve => {
+      const targets = loadingTargets(), planned = (it && it.plannedWave) || "", inRun = run && run.type === "LOADED" ? run : null;
+      picking = { id, planned, targets, resolve };
+      $("pick-id").textContent = `${CLASSWORD[id[0]]} ${id.slice(1)}`;
+      $("pick-known-label").hidden = !targets.length; $("pick-container-label").textContent = (targets.length ? "Or type a new name" : "Type a name") + " (POD1, TRUCK …); a new name starts a new container";
+      $("pick-known").innerHTML = targets.map(c => `<button class="quiet" data-known="${esc(c.name)}" data-wave="${esc(c.wave || "")}">${esc(c.name)}${c.wave ? " · " + esc(waveShort(c.wave)) : ""}</button>`).join("");
+      $("pick-known").querySelectorAll("button").forEach(b => b.onclick = () => { $("pick-container").value = b.dataset.known; if (b.dataset.wave) $("pick-wave").value = b.dataset.wave; pickRefresh(); });
+      $("pick-wave").innerHTML = ["W1", "W2", "W3"].map(w => `<option value="${w}">${esc(waveFull(w, state.names))}</option>`).join("") + `<option value="">Not decided</option>`;
+      $("pick-wave").value = inRun ? inRun.wave : planned;                                    // a paused loading session: its container and wave are the default
+      $("pick-container").value = inRun ? inRun.container : "";
+      pickRefresh(); $("pick").hidden = false;
+      if (!targets.length && !inRun) $("pick-container").focus();                              // with chips on screen, no keyboard until a name is typed
+    });
+  }
+  function pickRefresh(msg, bad) {                                                            // chips follow the typed name; the note says what the choice means, or why it was refused
+    if (!picking) return;
+    const cn = $("pick-container").value.trim().toUpperCase(), w = $("pick-wave").value, name = $("pick-id").textContent;
+    $("pick-known").querySelectorAll("button").forEach(b => b.classList.toggle("on", b.dataset.known === cn));
+    let note = msg || "";
+    if (!note && picking.planned && w && w !== picking.planned) note = `${name} is planned for ${waveShort(picking.planned)}; loading it${cn ? " into " + cn : ""} records it as ${waveShort(w)} and changes the plan to match.`;
+    else if (!note && picking.planned && !w) note = `No wave chosen: ${name} keeps its plan, ${waveShort(picking.planned)}.`;
+    else if (!note && cn && !picking.targets.some(c => c.name === cn) && !(state.containers[cn] && state.containers[cn].used)) note = `${cn} is a new container — this starts it.`;
+    $("pick-note").textContent = note; $("pick-note").hidden = !note; $("pick-note").classList.toggle("bad", !!bad);
+  }
+  function pickDone(result) { const pk = picking; picking = null; $("pick").hidden = true; if (pk) pk.resolve(result); }
+  $("pick-container").addEventListener("input", () => pickRefresh()); $("pick-wave").addEventListener("change", () => pickRefresh());
+  $("pick-container").addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); $("pick-yes").click(); } });
+  $("pick").addEventListener("keydown", e => { if (e.key === "Escape") pickDone(null); });
+  $("pick-no").onclick = () => pickDone(null);
+  $("pick-yes").onclick = () => {
+    if (!picking) return;
+    const cn = $("pick-container").value.trim().toUpperCase();
+    if (!cn) { pickRefresh("Name the container first — tap one above, or type a new name.", true); $("pick-container").focus(); return; }
+    if (!CONTAINER_RE.test(cn)) { pickRefresh("A container name is letters, digits, spaces, - or _ — up to 30 characters.", true); $("pick-container").focus(); return; }
+    const u = state.containers[cn]; if (u && u.used) { pickRefresh(usedText(u), true); return; }
+    pickDone({ container: cn, wave: $("pick-wave").value });
+  };
 
   // ---- photo viewer: full size from this phone if it is still here, otherwise fetched from Drive; "remove" sets the file aside, never deletes it ----
   let viewing = null;
@@ -1005,7 +1073,7 @@
   function renderModes() { $("main-actions").hidden = !!run || !!browse; $("browsebar").hidden = !browse || !!run; $("btn-browse").classList.toggle("on", !$("browse-setup").hidden); $("btn-scan").classList.toggle("on", scanning && !run); $("btn-scan").textContent = scanning && !run ? "Stop scanning" : "Scan Single Label"; $("btn-run").classList.toggle("on", !$("run-setup").hidden); }
   function fillRunChoices() {
     $("run-wave").innerHTML = ["W1", "W2", "W3"].map(w => `<option value="${w}">${esc(waveFull(w, state.names))}</option>`).join("") + `<option value="">Not decided</option>`;
-    const known = Object.values(state.containers).filter(c => c.loaded && !c.used).map(c => c.name).sort();          // still being loaded; a container marked anything is finished as a target
+    const known = loadingTargets().map(c => c.name);
     $("run-known-label").hidden = !known.length; $("run-known").innerHTML = known.map(c => `<button class="quiet" data-known="${esc(c)}">${esc(c)}</button>`).join("");
     $("run-known").querySelectorAll("button").forEach(b => b.onclick = () => { $("run-container").value = b.dataset.known; $("run-known").querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b)); runStartReady(); });
   }
@@ -1021,8 +1089,9 @@
     if (pickedType === "SEALED" && serverOlderThan(1, 2) && scriptNeedsUpdate("1.2")) return;
     const container = $("run-container").value.trim().toUpperCase();
     if (pickedType === "LOADED" && !container) { setStatus("Name the container first — POD1, TRUCK …", "warn"); $("run-container").focus(); return; }
+    if (pickedType === "LOADED" && !CONTAINER_RE.test(container)) { setStatus("A container name is letters, digits, spaces, - or _ — up to 30 characters.", "warn"); $("run-container").focus(); return; }
     const used = pickedType === "LOADED" && state.containers[container] && state.containers[container].used;
-    if (used) { const u = state.containers[container]; setStatus(`${container} has already been ${u.last.type === "DEPARTED" ? verbFor(container) : u.last.type === "DELIVERED" ? "delivered" : "returned to the shipper"} (${whenText(u.last.ts)}). A container is used once — give this one a new name.`, "warn"); $("run-container").focus(); return; }
+    if (used) { setStatus(usedText(state.containers[container]), "warn"); $("run-container").focus(); return; }
     run = { type: pickedType, container: pickedType === "LOADED" ? container : "", wave: pickedType === "LOADED" ? $("run-wave").value : "", count: 0 };
     store.set("lot26.run", run); $("run-setup").hidden = true; currentId = null; $("result").innerHTML = ""; recompute(); beepInit(); if (!scanning) startScan();
   };
