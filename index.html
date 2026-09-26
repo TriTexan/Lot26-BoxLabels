@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Lot 26 Box Lookup</title>
+<title>Lot 26 boxes</title>
 <style>
   :root {
     box-sizing: border-box;
@@ -67,51 +67,236 @@
   .chips { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
   .chips button { flex: 1 1 30%; padding: 11px 8px; }
   @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+
+  /* ---- v2 additions ---- */
+  [hidden] { display: none !important; }
+  .row.tight { flex-wrap: nowrap; } .row.tight input { min-width: 0; }
+  .head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .pill { flex: 0 0 auto; font-size: 14px; padding: 8px 12px; border-radius: 999px; }
+  .pill.ok { background: #e4f4ea; color: #12613a; border-color: #b9dfc8; }
+  .pill.wait { background: #fff3cf; color: #6b4e00; border-color: #ecd58a; }
+  .pill.bad { background: #fde3e6; color: #8f0c20; border-color: #f0b3bb; }
+  #practice { position: sticky; top: 0; z-index: 5; text-align: center; font-weight: 800; padding: 8px 10px; color: #111;
+    background: repeating-linear-gradient(45deg, #F2C230 0 18px, #ffe28a 18px 30px); border-bottom: 2px solid #111; }
+  #runbar { position: sticky; top: 0; z-index: 4; display: flex; align-items: center; gap: 10px; background: var(--btn); color: var(--btn-ink);
+    border-radius: 12px; padding: 10px 12px; margin: 8px 0; font-weight: 700; }
+  #practice:not([hidden]) ~ main #runbar { top: 38px; }
+  #runbar .what { flex: 1 1 auto; line-height: 1.2; } #runbar .what small { display: block; font-weight: 500; opacity: .8; }
+  #runbar button { flex: 0 0 auto; background: var(--bg); color: var(--ink); padding: 9px 14px; }
+  .panel { border: 1px solid var(--line); border-radius: 12px; padding: 12px; margin-top: 10px; background: var(--panel); }
+  .panel .ptitle { margin: 0 0 8px; font-weight: 700; }
+  .field { display: block; margin-top: 10px; font-size: 14px; color: var(--muted); }
+  .field input, .field select, .field textarea { display: block; width: 100%; box-sizing: border-box; margin-top: 4px; font: inherit; font-size: 17px; letter-spacing: 0;
+    padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); color: var(--ink); }
+  .chips button.on { background: var(--btn); color: var(--btn-ink); border-color: var(--btn); }
+  #hit { border-radius: 12px; overflow: hidden; margin: 10px 0; border: 1px solid var(--line); background: #fff; color: #111; }
+  #hit .block .stage { font-size: clamp(30px, 10vw, 46px); }
+  #hit .verdict { display: flex; align-items: center; gap: 10px; padding: 10px 14px; font-weight: 700; font-size: 19px; }
+  #hit .verdict span { flex: 1 1 auto; } #hit .verdict button { flex: 0 0 auto; padding: 8px 12px; font-size: 15px; }
+  #hit.ok .verdict { background: #e4f4ea; color: #12613a; } #hit.dup .verdict { background: #eee; color: #444; } #hit.warn .verdict { background: #fff3cf; color: #6b4e00; }
+  .label .edit { margin-top: 14px; border-top: 1px solid #ddd; padding-top: 10px; }
+  .label .field { color: #555; } .label .field textarea, .label .field select, .label .field input { background: #fff; color: #111; border-color: #ccc; }
+  .label details.labeltext { margin-top: 12px; border-top: 1px solid #ddd; padding-top: 4px; } .label details.labeltext > summary { font-size: 16px; font-weight: 600; color: #333; padding: 8px 0; }
+  .label .elabel { font-size: 14px; color: #555; margin-top: 10px; }
+  .label button.quiet { background: #f3f3f3; color: #111; border: 1px solid #d0d0d0; }
+  .label button.quiet.on { background: #111; color: #fff; border-color: #111; }
+  .label .save { background: #111; color: #fff; }
+  .thumbs { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; } .thumbs img { width: 76px; height: 76px; object-fit: cover; border-radius: 8px; border: 1px solid #ccc; }
+  .pcount { font-size: 14px; color: #555; margin-top: 6px; }
+  .daylist { margin-top: 14px; } .daylist h2 { font-size: 17px; margin: 0 0 6px; }
+  .daylist.done { color: var(--ok); font-weight: 700; }
+  .idlist { display: flex; flex-direction: column; gap: 6px; }
+  .idlist button { display: flex; gap: 10px; align-items: baseline; text-align: left; padding: 10px 12px; font-weight: 500; }
+  .idlist button b { flex: 0 0 auto; font-variant-numeric: tabular-nums; } .idlist button span { color: var(--muted); font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .counts { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; font-size: 16px; margin: 8px 0; } .counts b { text-align: right; font-variant-numeric: tabular-nums; }
+  .note { font-size: 14px; color: var(--muted); margin: 6px 0 0; } .note.warn { color: var(--warn); }
+  .camtools button { padding: 9px 10px; font-size: 15px; } .camtools button.on { background: var(--btn); color: var(--btn-ink); }
+  #hit.alert { border: 3px solid #b3142c; } #hit.alert .verdict { background: #fde3e6; color: #8f0c20; font-size: 17px; line-height: 1.3; align-items: flex-start; }
+  #alarm { position: fixed; inset: 0; z-index: 30; display: flex; align-items: center; justify-content: center; padding: 18px; background: rgba(120, 8, 24, .94); }
+  #alarm .alarm-box { width: 100%; max-width: 520px; background: #fff; color: #111; border-radius: 16px; padding: 20px; border: 4px solid #b3142c; text-align: center; font-size: 17px; line-height: 1.4; }
+  #alarm .alarm-id { font-size: clamp(34px, 11vw, 52px); font-weight: 800; line-height: 1; } #alarm .alarm-head { font-size: 22px; font-weight: 800; color: #8f0c20; margin-top: 8px; }
+  #alarm .alarm-when { font-size: 18px; color: #333; margin-top: 2px; } #alarm p { margin: 12px 0 0; } #alarm button { width: 100%; margin-top: 16px; background: #111; color: #fff; font-size: 19px; padding: 16px; }
+  #main-actions button.on { background: var(--btn); color: var(--btn-ink); border-color: var(--btn); }
+  #runbar button { margin-left: 6px; } 
+  .thumbs .ptile { width: 84px; height: 84px; padding: 0; overflow: hidden; border-radius: 8px; border: 1px solid #ccc; background: #f3f3f3; color: #333; font-size: 13px; font-weight: 600; }
+  .thumbs .ptile img { width: 100%; height: 100%; object-fit: cover; display: block; border: 0; border-radius: 0; } .thumbs .ptile small { display: block; font-weight: 400; color: #666; }
+  #viewer { position: fixed; inset: 0; z-index: 25; background: #111; color: #fff; display: flex; flex-direction: column; }
+  #viewer .viewer-bar { display: flex; align-items: center; gap: 10px; padding: 10px 12px; } #viewer .viewer-bar span { flex: 1 1 auto; font-size: 15px; } #viewer .viewer-bar button { flex: 0 0 auto; }
+  #viewer .viewer-img { flex: 1 1 auto; overflow: auto; display: flex; align-items: center; justify-content: center; } #viewer img { max-width: 100%; max-height: 100%; touch-action: pinch-zoom; } #viewer p { color: #ddd; padding: 20px; text-align: center; }
+  #browsebar { display: flex; align-items: center; gap: 8px; background: var(--panel); color: var(--ink); border: 2px solid var(--btn); border-radius: 12px; padding: 8px 10px; margin: 8px 0; font-weight: 700; }
+  #browsebar .what { flex: 1 1 auto; line-height: 1.2; min-width: 0; } #browsebar .what small { display: block; font-weight: 500; color: var(--muted); }
+  #browsebar button { flex: 0 0 auto; padding: 10px 14px; } #browsebar button:disabled { opacity: .35; }
+  #ask { position: fixed; inset: 0; z-index: 30; display: flex; align-items: center; justify-content: center; padding: 18px; background: rgba(90, 60, 0, .93); }
+  #ask .alarm-box { width: 100%; max-width: 520px; background: #fff; color: #111; border-radius: 16px; padding: 20px; border: 4px solid #b07a00; text-align: center; font-size: 17px; line-height: 1.4; }
+  #ask .alarm-id { font-size: clamp(34px, 11vw, 52px); font-weight: 800; line-height: 1; } #ask .alarm-head { font-size: 21px; font-weight: 800; color: #6b4e00; margin-top: 8px; } #ask .alarm-when { font-size: 17px; color: #333; margin-top: 4px; }
+  #ask p { margin: 12px 0 0; } #ask button { width: 100%; margin-top: 12px; font-size: 18px; padding: 15px; } #ask #ask-yes { background: #111; color: #fff; } #ask #ask-no { background: #f3f3f3; color: #111; border: 1px solid #ccc; }
+  .block .top .pos { font-weight: 700; font-size: 14px; padding: 2px 10px; border-radius: 999px; background: rgba(0,0,0,.28); color: #fff; align-self: center; }
+  .block.dark-ink .top .pos { background: rgba(255,255,255,.55); color: #111; }
+  .browsefoot { margin-top: 16px; border-top: 1px solid #ddd; padding-top: 12px; } .browsefoot button:disabled { opacity: .35; }
+  @keyframes fromRight { from { transform: translateX(72px); opacity: .15; } to { transform: none; opacity: 1; } }
+  @keyframes fromLeft { from { transform: translateX(-72px); opacity: .15; } to { transform: none; opacity: 1; } }
+  #result { overflow-x: hidden; } .label.from-right { animation: fromRight .22s ease-out; } .label.from-left { animation: fromLeft .22s ease-out; }
+  @media (prefers-reduced-motion: reduce) { .label.from-right, .label.from-left { animation: none; } }
+  input::placeholder, textarea::placeholder { font-style: italic; color: #a0a0a0; opacity: 1; }   /* an instruction, never mistakable for an entry */
+  .label .field input::placeholder, .label .field textarea::placeholder { color: #b0b0b0; }
+  #hit .verdict.askmark { background: #fff3cf; color: #6b4e00; font-size: 16px; flex-wrap: wrap; } #hit .verdict.askmark span { flex: 1 1 100%; } #hit .verdict.askmark button { flex: 1 1 auto; } #hit .verdict.askmark #hit-mark { background: #111; color: #fff; }
+  .daylist h3.divider { font-size: 14px; font-weight: 600; color: var(--muted); margin: 10px 0 4px; padding-bottom: 3px; border-bottom: 1px solid var(--line); }
+  #pick { position: fixed; inset: 0; z-index: 30; display: flex; align-items: center; justify-content: center; padding: 18px; box-sizing: border-box; overflow-y: auto; background: rgba(0, 0, 0, .78); }
+  #pick .pick-box { width: 100%; max-width: 520px; margin: auto 0; box-sizing: border-box; background: #fff; color: #111; border-radius: 16px; padding: 20px; border: 4px solid #111; text-align: left; font-size: 17px; line-height: 1.4; }
+  #pick .alarm-id { font-size: clamp(30px, 9vw, 44px); font-weight: 800; line-height: 1; text-align: center; } #pick .pick-head { font-size: 20px; font-weight: 800; margin-top: 8px; text-align: center; }
+  #pick .elabel { font-size: 14px; color: var(--muted); margin-top: 12px; } #pick .chips { margin-top: 6px; }
+  #pick .chips button { background: #f3f3f3; color: #111; border: 1px solid #d0d0d0; } #pick .chips button.on { background: #111; color: #fff; border-color: #111; }
+  #pick .field { color: #555; } #pick .field input, #pick .field select { background: #fff; color: #111; border-color: #ccc; }
+  #pick .pick-note { margin-top: 12px; padding: 10px 12px; border-radius: 10px; background: #fff4d6; color: #6b4e00; font-size: 15px; } #pick .pick-note.bad { background: #fde3e3; color: #8a1020; }
+  #pick button { width: 100%; margin-top: 12px; font-size: 18px; padding: 15px; } #pick .chips button { width: auto; margin-top: 0; font-size: 16px; padding: 10px 14px; }
+  #pick #pick-yes { background: #111; color: #fff; } #pick #pick-no { background: #f3f3f3; color: #111; border: 1px solid #ccc; }
+  .sub.warn { color: var(--warn); }
 </style>
 </head>
 <body>
+<div id="practice" hidden>Practice mode — nothing you do here counts</div>
+<div id="viewer" hidden role="dialog" aria-modal="true">
+  <div class="viewer-bar"><span id="viewer-cap"></span><button id="viewer-close" class="quiet">Close</button></div>
+  <div class="viewer-img"><img id="viewer-img" alt=""><p id="viewer-msg"></p></div>
+  <div class="viewer-bar"><button id="viewer-del" class="quiet">Remove this photo</button></div>
+</div>
+<div id="ask" hidden role="alertdialog" aria-modal="true">
+  <div class="alarm-box">
+    <div class="alarm-id" id="ask-id"></div>
+    <div class="alarm-head" id="ask-head"></div>
+    <div class="alarm-when" id="ask-when"></div>
+    <p>Not loaded yet. Scanning is paused.</p>
+    <button id="ask-alt" hidden></button>
+    <button id="ask-yes" class="quiet"></button>
+    <button id="ask-no" class="quiet"></button>
+  </div>
+</div>
+<div id="pick" hidden role="dialog" aria-modal="true">
+  <div class="pick-box">
+    <div class="alarm-id" id="pick-id"></div>
+    <div class="pick-head">Which container is it going into?</div>
+    <div class="elabel" id="pick-known-label" hidden>Already being loaded — tap to pick</div>
+    <div class="chips" id="pick-known"></div>
+    <label class="field"><span id="pick-container-label">Type a name (POD1, TRUCK …); a new name starts a new container</span><input id="pick-container" type="text" placeholder="type a name for it" autocomplete="off" autocapitalize="characters" enterkeyhint="done"></label>
+    <label class="field">Wave it is loaded in<select id="pick-wave"></select></label>
+    <div class="pick-note" id="pick-note" hidden></div>
+    <button id="pick-yes">Loaded — record it</button>
+    <button id="pick-no" class="quiet">Cancel — nothing recorded</button>
+  </div>
+</div>
+<div id="alarm" hidden role="alertdialog" aria-modal="true">
+  <div class="alarm-box">
+    <div class="alarm-id" id="alarm-id"></div>
+    <div class="alarm-head" id="alarm-head"></div>
+    <div class="alarm-when" id="alarm-when"></div>
+    <p id="alarm-p1">Not counted. Scanning is paused.</p>
+    <p id="alarm-p2"><b>Same box scanned twice?</b> Nothing to do.<br><b>A different box?</b> Set it aside — two boxes share this label. It needs a new number and new labels.</p>
+    <button id="alarm-ok">OK — carry on scanning</button>
+  </div>
+</div>
 <main>
-  <h1>Lot 26 Box Lookup</h1>
-  <p class="sub" id="inv-status">No inventory loaded yet.</p>
+  <div class="head">
+    <h1>Lot 26 boxes</h1>
+    <button id="pill" class="pill quiet" aria-live="polite">Starting…</button>
+  </div>
+  <p class="sub" id="inv-status">No inventory yet.</p>
+  <button id="ready-strip" class="quiet" hidden style="width:100%;margin:2px 0 6px"></button>
 
-  <div class="row">
-    <button id="btn-scan">Scan a label</button>
-    <label class="filebtn quiet" for="file-inv">Load inventory.csv<input id="file-inv" type="file" accept=".csv,text/csv,text/plain,*/*"></label>
+  <div id="runbar" hidden><div class="what" id="run-what"></div><button id="run-pause">Pause camera</button><button id="run-end">Finish</button></div>
+
+  <div class="row" id="main-actions">
+    <button id="btn-scan" class="quiet">Scan Single Label</button>
+    <button id="btn-run" class="quiet">Scan Multiple: Seal · Load · Unload</button>
+    <button id="btn-browse" class="quiet">Browse by Room</button>
   </div>
-  <div class="row" style="margin-top:8px">
-    <label class="filebtn quiet" for="file-log">Load checkpoint_log.csv (optional)<input id="file-log" type="file" accept=".csv,text/csv,text/plain,*/*"></label>
-    <button id="btn-paste" class="quiet">Paste CSV text instead</button>
+
+  <div id="browsebar" hidden><button id="browse-prev" aria-label="Previous">◀</button><div class="what" id="browse-what"></div><button id="browse-next" aria-label="Next">▶</button><button id="browse-done">Done</button></div>
+
+  <div id="browse-setup" class="panel" hidden>
+    <p class="ptitle">Go through the boxes for one area</p>
+    <label class="field">Stage area (where it is dropped first)<select id="br-stage"></select></label>
+    <label class="field">Final location<select id="br-final"></select></label>
+    <label class="field">Planned wave<select id="br-wave"></select></label>
+    <p class="note" id="br-count"></p>
+    <div class="row" style="margin-top:8px"><button id="br-start" disabled>Start with the first</button><button id="br-cancel" class="quiet">Cancel</button></div>
+    <div id="br-list" style="margin-top:10px"></div>
   </div>
-  <div id="paste-box" hidden style="margin-top:8px">
-    <p class="sub">Open inventory.csv in Drive or Sheets, select all, copy, and paste it here. Works in any viewer, including the Claude app.</p>
-    <textarea id="paste-text" rows="6" style="width:100%;box-sizing:border-box;font:13px ui-monospace,monospace;border:1px solid var(--line);border-radius:10px;padding:8px;background:var(--bg);color:var(--ink)" placeholder="id,class,dest,stage,..."></textarea>
-    <div class="row" style="margin-top:6px">
-      <button id="btn-paste-inv" class="quiet">Use as inventory</button>
-      <button id="btn-paste-log" class="quiet">Use as checkpoint log</button>
+
+  <div id="run-setup" class="panel" hidden>
+    <p class="ptitle">What are you doing?</p>
+    <div class="chips" id="run-types">
+      <button class="quiet" data-type="SEALED">Sealing</button>
+      <button class="quiet" data-type="LOADED">Loading</button>
+      <button class="quiet" data-type="RECEIVED">Unloading</button>
+      <button class="quiet" data-type="PLACED">Putting in rooms</button>
     </div>
+    <div id="run-load-fields" hidden>
+      <div class="elabel" id="run-known-label" hidden style="font-size:14px;color:var(--muted);margin-top:10px">Already in use — tap to pick</div>
+      <div class="chips" id="run-known"></div>
+      <label class="field">Container it's going into — required. Tap one above, or type a new name (POD1, TRUCK …); a new name starts a new container<input id="run-container" type="text" list="containers" placeholder="type a name for it" autocomplete="off" autocapitalize="characters"></label>
+      <datalist id="containers"></datalist>
+      <label class="field">Wave<select id="run-wave"></select></label>
+    </div>
+    <div class="row" style="margin-top:12px"><button id="run-start" disabled>Start scanning</button><button id="run-cancel" class="quiet">Cancel</button></div>
+    <p class="note">Every label you scan is recorded by itself — no tapping per box. A label scanned a second time stops the session until someone answers the alarm.</p>
   </div>
 
   <div class="scan" id="scan"><video id="video" playsinline muted></video><div class="frame"></div></div>
+  <div class="row camtools" id="camtools" hidden><button id="cam-zoom" class="quiet" hidden>Zoom</button><button id="cam-light" class="quiet" hidden>Light</button><button id="cam-switch" class="quiet" hidden>Switch camera</button></div>
+  <p class="note" id="scan-diag" hidden></p>
+  <div id="hit" hidden></div>
   <p class="status" id="scan-status"></p>
 
-  <div class="row" style="margin-top:10px">
-    <input id="manual" type="text" inputmode="numeric" placeholder="or type a number: 052, F013, E002" autocomplete="off">
+  <div class="row tight" style="margin-top:10px">
+    <input id="manual" type="text" inputmode="numeric" placeholder="or type a box or item number" autocomplete="off">
     <button id="btn-go" class="quiet" style="flex:0 0 auto">Look up</button>
   </div>
 
   <div id="result"></div>
+  <div id="daylists"></div>
 
   <hr>
-  <details>
-    <summary>Sightings logged on this device</summary>
-    <p class="sub">Each "Log sighting" adds a row here. Copy the rows into checkpoint_log.csv when you're back at the laptop.</p>
-    <div class="log" id="log-view">(none yet)</div>
+  <details id="d-where"><summary>Where everything is</summary><div id="where"></div></details>
+
+  <details id="d-settings">
+    <summary>Settings and sync</summary>
+    <label class="field">Your name — required; it goes on everything this phone records<input id="cfg-who" type="text" placeholder="type your first name here" autocomplete="off"></label>
+    <label class="field">Sync address — needed for sync; the Web app URL from the script's deployment, ending in /exec<input id="cfg-url" type="url" placeholder="paste the Web app URL here" autocomplete="off" autocapitalize="none" spellcheck="false"></label>
+    <label class="field">Passphrase — needed for sync; the one set in the script<input id="cfg-token" placeholder="type the passphrase here" type="text" autocomplete="off" autocapitalize="none" spellcheck="false"></label>
+    <label class="field">Photo size<select id="cfg-photo"><option value="2560">Standard — sharp, quick to upload</option><option value="0">Full size — slower on cellular</option></select></label>
+    <label class="field" style="display:flex;gap:10px;align-items:center;color:var(--ink);font-size:16px"><input id="cfg-practice" type="checkbox" style="width:22px;height:22px;flex:0 0 auto;margin:0"> Practice mode — record to a separate practice file</label>
+    <div class="elabel" style="font-size:14px;color:var(--muted);margin-top:14px">What you call each wave (shared by both phones; changes no record)</div>
+    <label class="field">Wave 1<input id="name-W1" type="text" maxlength="40" autocomplete="off"></label>
+    <label class="field">Wave 2<input id="name-W2" type="text" maxlength="40" autocomplete="off"></label>
+    <label class="field">Wave 3<input id="name-W3" type="text" maxlength="40" autocomplete="off"></label>
+    <div class="row" style="margin-top:12px"><button id="cfg-save">Save and test</button><button id="cfg-sync" class="quiet">Sync now</button></div>
+    <div class="row" style="margin-top:8px"><button id="cfg-link" class="quiet">Copy setup link for another phone</button></div>
+    <div class="row" style="margin-top:8px"><button id="cfg-reset" class="quiet" hidden>Reset practice — start clean</button></div>
+    <p class="note" id="sync-detail"></p>
+    <p class="note">The setup link contains the sync address and passphrase. Send it only to the other phone.</p>
+  </details>
+
+  <details id="d-journal">
+    <summary>Recorded on this phone</summary>
+    <p class="note" id="journal-note"></p>
+    <div class="row" style="margin-top:8px"><button id="j-share" class="quiet">Share as a file</button><button id="j-copy" class="quiet">Copy as text</button></div>
+    <div class="row" style="margin-top:8px"><button id="j-photos" class="quiet">Save waiting photos to this phone</button></div>
+    <p class="note">Only needed if sync is not available. Everything here is also kept on the phone until you clear the browser's data.</p>
+  </details>
+
+  <details id="d-byhand">
+    <summary>Load inventory by hand</summary>
+    <p class="note">With sync set up, inventory refreshes from Drive by itself. This is the fallback.</p>
     <div class="row" style="margin-top:8px">
-      <button id="btn-copy" class="quiet">Copy rows</button>
-      <button id="btn-share" class="quiet">Share rows</button>
-      <button id="btn-clearlog" class="quiet">Clear rows</button>
+      <label class="filebtn quiet" for="file-inv">Load inventory.csv<input id="file-inv" type="file" accept=".csv,text/csv,text/plain,*/*"></label>
+      <button id="btn-paste" class="quiet">Paste CSV text</button>
+    </div>
+    <div id="paste-box" hidden style="margin-top:8px">
+      <textarea id="paste-text" rows="6" style="width:100%;box-sizing:border-box;font:13px ui-monospace,monospace;border:1px solid var(--line);border-radius:10px;padding:8px;background:var(--bg);color:var(--ink)" placeholder="paste the CSV text here"></textarea>
+      <div class="row" style="margin-top:6px"><button id="btn-paste-inv" class="quiet">Use as inventory</button></div>
     </div>
   </details>
+  <input id="cam" type="file" accept="image/*" capture="environment" hidden>
 </main>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
@@ -135,154 +320,1016 @@
   const floorOf = t => OUT.has(t) ? "Outdoor" : (F1.has(t) || (t||"").startsWith("NEXTGEN") || t === "GARAGE") ? "Floor 1" : F2.has(t) ? "Floor 2" : "";
   const stageOf = r => (r.stage || "").trim().toUpperCase() || DEST_TO_STAGE[(r.dest||"").trim().toUpperCase()] || "GARAGE";
 
-  // ---- state (kept on this device only) ----
-  const store = { get(k){ try { return JSON.parse(localStorage.getItem(k)); } catch(e){ return null; } },
-                  set(k,v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch(e){} } };
-  let inventory = store.get("lot26.inventory") || null;   // {rows:[...], loaded:"iso", name:""}
-  let chklog    = store.get("lot26.chklog") || null;      // {rows:[...], loaded:"iso"}
-  let sightings = store.get("lot26.sightings") || [];     // rows this device logged
-  let byId = {};
-  const $ = id => document.getElementById(id);
+  // ---- core: events -> state. No DOM in this block (it is unit-tested on its own). ----
+  // Packing states first, then moving states. PACKED is the older single "packed" mark; it is read as SEALED and no longer offered.
+  const PACK_STATES = ["STARTED", "READY", "SEALED"];
+  const MOVE_STATES = ["LOADED", "RECEIVED", "PLACED"];
+  const CHECKPOINTS = PACK_STATES.concat(["PACKED"], MOVE_STATES);
+  const isSealed = it => !!(it && it.last && (it.last.type === "SEALED" || it.last.type === "PACKED"));
+  const CONTAINER_TYPES = ["DEPARTED", "DELIVERED", "RETURNED"];   // about a whole pod or truck; they carry a container name and no item id. Used once: none → departed → delivered → returned to shipper
+  const EV_COLS = ["event_id", "ts", "who", "id", "type", "field", "value", "container", "wave", "location", "photo", "note"];
+  // Waves are stable codes in the data (W1, W2, W3). What people CALL them is a display name: changeable at any time, changing no record.
+  const WAVE_DEFAULTS = { W1: "the Pre-Pod", W2: "the main move", W3: "after the sale" };
+  const waveShort = code => (code || "").replace(/^W/i, "Wave ");
+  const waveFull = (code, names) => { const v = (names || {})["wave:" + code], n = (v != null ? v : (WAVE_DEFAULTS[code] || "")).trim(); return waveShort(code) + (n ? " — " + n : ""); };
+  const W1_WORDS = { MUST: "Must go", OK: "Can go if there's room" };      // asked only of items planned for Wave 1; "not going" is now said by planning another wave
+  const WAVES = ["W1", "W2", "W3"];
 
-  function index() {
-    byId = {};
-    if (inventory) for (const r of inventory.rows) { const k = (r.id||"").trim().toUpperCase(); if (k) byId[k] = r; }
-    $("inv-status").textContent = inventory
-      ? `Inventory: ${inventory.rows.length} items from ${inventory.name} (loaded ${new Date(inventory.loaded).toLocaleString()})`
-        + (chklog ? ` · checkpoint log: ${chklog.rows.length} rows` : "")
-      : "No inventory loaded yet. Tap “Load inventory.csv” and pick the file from Drive.";
+  function uuid() {
+    if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
+    const b = new Uint8Array(16);
+    if (typeof crypto !== "undefined" && crypto.getRandomValues) crypto.getRandomValues(b); else for (let i = 0; i < 16; i++) b[i] = Math.random() * 256;
+    b[6] = (b[6] & 0x0f) | 0x40; b[8] = (b[8] & 0x3f) | 0x80;
+    const h = Array.from(b, x => x.toString(16).padStart(2, "0")).join("");
+    return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
   }
-  index(); renderLog();
 
-  // ---- loading CSVs ----
-  function loadCsv(file, cb) {
-    Papa.parse(file, { header: true, skipEmptyLines: true, complete: res => cb(res.data, file.name), error: e => setStatus("Could not read that file: " + e.message, "warn") });
+  function mkEvent(who, id, type, extra) {
+    const ev = { event_id: uuid(), ts: new Date().toISOString(), who: who || "", id, type };
+    for (const c of EV_COLS) if (!(c in ev)) ev[c] = "";
+    return Object.assign(ev, extra || {});
   }
-  function useInventory(rows, name) {
-    if (!rows.length || !("id" in rows[0])) { setStatus("No “id” column found — is this inventory.csv?", "warn"); return; }
-    inventory = { rows, loaded: new Date().toISOString(), name }; store.set("lot26.inventory", inventory); index(); setStatus(`Loaded ${rows.length} items.`, "ok");
-  }
-  function useLog(rows) { chklog = { rows, loaded: new Date().toISOString() }; store.set("lot26.chklog", chklog); index(); setStatus(`Loaded ${rows.length} checkpoint rows.`, "ok"); }
-  $("btn-paste").onclick = () => { const b = $("paste-box"); b.hidden = !b.hidden; if (!b.hidden) $("paste-text").focus(); };
-  $("btn-paste-inv").onclick = () => { const t = $("paste-text").value.trim(); if (!t) { setStatus("Paste the CSV text first.", "warn"); return; } useInventory(Papa.parse(t, { header: true, skipEmptyLines: true }).data, "pasted text"); };
-  $("btn-paste-log").onclick = () => { const t = $("paste-text").value.trim(); if (!t) { setStatus("Paste the CSV text first.", "warn"); return; } useLog(Papa.parse(t, { header: true, skipEmptyLines: true }).data); };
-  $("file-inv").onchange = e => { const f = e.target.files[0]; if (!f) return;
-    loadCsv(f, (rows, name) => useInventory(rows, name)); e.target.value = ""; };
-  $("file-log").onchange = e => { const f = e.target.files[0]; if (!f) return;
-    loadCsv(f, (rows) => useLog(rows)); e.target.value = ""; };
 
-  // ---- ID parsing: works for every QR format printed so far ----
+  // ID parsing: works for every QR format printed so far, and for typed numbers.
   function parseId(text) {
     if (!text) return null;
     let m = text.match(/\b(Box|Equip(?:ment)?|Furniture)\s*[:#]?\s*(\d{1,3})\b/i);
-    if (m) return ({box:"B",equip:"E",equipment:"E",furniture:"F"})[m[1].toLowerCase()] + m[2].padStart(3,"0");
+    if (m) return ({ box: "B", equip: "E", equipment: "E", furniture: "F" })[m[1].toLowerCase()] + m[2].padStart(3, "0");
     m = text.trim().match(/^([BEF])[-\s]?(\d{1,3})$/i);
-    if (m) return m[1].toUpperCase() + m[2].padStart(3,"0");
+    if (m) return m[1].toUpperCase() + m[2].padStart(3, "0");
     m = text.trim().match(/^(\d{1,3})$/);
-    if (m) return "B" + m[1].padStart(3,"0");
+    if (m) return "B" + m[1].padStart(3, "0");
     return null;
   }
 
-  // ---- result rendering ----
-  function show(id) {
-    const r = byId[id];
-    const out = $("result");
-    if (!inventory) { out.innerHTML = `<div class="empty">Load inventory.csv first, then scan or type a number.</div>`; return; }
-    if (!r) { out.innerHTML = `<div class="empty">${CLASSWORD[id[0]]||""} ${id.slice(1)} isn't in the inventory that's loaded. If it's a new box, reload a fresh inventory.csv from Drive.</div>`; return; }
-    const st = stageOf(r), [fill, ink] = STAGE[st] || ["#888","white"];
-    const dest = (r.dest||"").trim().toUpperCase();
+  // Union by event_id, oldest first. The same event arriving from the phone and from Drive counts once.
+  function mergeEvents() {
+    const seen = new Map();
+    for (const list of arguments) for (const e of (list || [])) if (e && e.event_id && !seen.has(e.event_id)) seen.set(e.event_id, e);
+    return Array.from(seen.values()).sort((a, b) => (a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : a.event_id < b.event_id ? -1 : 1));
+  }
+
+  // inventory rows + events -> what is true about every item right now.
+  function deriveState(rows, events) {
+    const undone = new Set(events.filter(e => e.type === "UNDO").map(e => e.value));
+    const items = {}, containers = {}, names = {};
+    const get = id => items[id] || (items[id] = { id, base: null, edits: {}, history: [], photos: [], unknown: true });
+    const box = name => containers[name] || (containers[name] = { name, events: [], wave: "", loaded: 0, checkedIn: 0 });
+    for (const r of (rows || [])) { const id = (r.id || "").trim().toUpperCase(); if (id) { const it = get(id); it.base = r; it.unknown = false; } }
+    for (const e of events) {
+      if (e.type === "UNDO" && !e.id && e.container) { box(e.container).undoTs = e.ts; continue; }   // an undo of a container mark: one step back, and no second step until a new mark is made
+      if (e.type === "UNDO" || undone.has(e.event_id)) continue;
+      if (e.type === "NAME") { names[e.field] = e.value || ""; continue; }                // last one wins; events are oldest-first
+      if (CONTAINER_TYPES.includes(e.type)) { if (e.container) box(e.container).events.push(e); continue; }
+      if (!(e.id || "").trim()) continue;
+      const it = get((e.id || "").trim().toUpperCase());
+      if (e.type === "EDIT") it.edits[e.field] = e.value;               // events are oldest-first, so the last write wins
+      else if (e.type === "PHOTO") it.photos.push({ name: e.photo, event_id: e.event_id, ts: e.ts, who: e.who || "" });
+      else if (CHECKPOINTS.includes(e.type) || e.type === "SEEN") it.history.push(e);
+    }
+    for (const it of Object.values(items)) {
+      it.row = Object.assign({ id: it.id, class: it.id[0] }, it.base || {}, it.edits);
+      const cps = it.history.filter(e => e.type !== "SEEN");
+      it.last = cps.length ? cps[cps.length - 1] : null;
+      it.loaded = null;
+      for (const e of cps) if (e.type === "LOADED") it.loaded = e;
+      it.arrived = !!(it.loaded && cps.some(e => (e.type === "RECEIVED" || e.type === "PLACED") && e.ts > it.loaded.ts));
+      it.received = cps.some(e => e.type === "RECEIVED" || e.type === "PLACED");
+      if (it.loaded) { if (it.loaded.wave) it.row.wave = it.loaded.wave; it.container = it.loaded.container || ""; }
+      // planned wave: what we THINK it travels in (set on the card, or from inventory). Once loaded, the wave it was actually loaded in is the fact.
+      const pw = ((it.edits.wave != null ? it.edits.wave : ((it.base || {}).wave || "")) || "").trim().toUpperCase(); it.plannedWave = WAVES.includes(pw) ? pw : "";
+      it.row.wave = (it.loaded && it.loaded.wave) || it.plannedWave;
+      it.w1 = it.plannedWave === "W1" && W1_WORDS[(it.row.w1 || "").trim().toUpperCase()] ? (it.row.w1 || "").trim().toUpperCase() : "";
+      // Where is a loaded item? Only a container event made AFTER this item went in counts for it (a container name can be reused for a later trip).
+      const c = it.loaded && it.container ? box(it.container) : null;
+      if (c) { c.loaded++; if (it.loaded.wave) c.wave = it.loaded.wave; else if (!c.wave && it.plannedWave) c.wave = it.plannedWave;   // a load made without a session wave: the plan stands in
+        if (it.arrived) { c.checkedIn++; const first = cps.find(e => (e.type === "RECEIVED" || e.type === "PLACED") && e.ts > it.loaded.ts);
+          const wasAway = first && c.events.some(e => e.type === "DEPARTED" && e.ts > it.loaded.ts && e.ts < first.ts);   // only a container that was on its way can evidently have been delivered
+          if (first && wasAway && (!c.evidentTs || first.ts < c.evidentTs)) { c.evidentTs = first.ts; c.evidentWho = first.who || ""; }
+          if (first && !wasAway) c.outOfTurn = (c.outOfTurn || 0) + 1; } }
+    }
+    for (const c of Object.values(containers)) { c.last = c.events.length ? c.events[c.events.length - 1] : null;
+      c.returned = !!(c.last && c.last.type === "RETURNED"); c.used = !!c.last;                           // used = marked at least once: never a loading target again
+      c.undoLocked = !!(c.undoTs && (!c.last || c.undoTs > c.last.ts)); }
+    for (const it of Object.values(items)) {
+      const c = it.loaded && it.container ? containers[it.container] : null, after = t => c && c.events.filter(e => e.type === t && e.ts > it.loaded.ts).pop();
+      it.departed = after("DEPARTED") || null; it.delivered = after("DELIVERED") || null;
+      it.inferred = !it.delivered && !!(c && c.evidentTs && c.evidentTs > it.loaded.ts);       // no mark, but boxes loaded with it have been checked in
+      it.phase = !it.loaded ? "" : it.arrived ? "IN" : (it.delivered || it.inferred) ? "DELIVERED" : it.departed ? "TRANSIT" : "ONBOARD";
+    }
+    return { items, undone, containers, names };
+  }
+
+  // The three lists that matter on a loading or unloading day.
+  const waveOf = i => ((i.loaded && i.loaded.wave) || i.plannedWave || "");          // the wave it was loaded in; failing that, the plan
+  const stateOf = i => (i.received ? "IN" : i.loaded ? i.phase : "NOTLOADED");           // one current state per item, whatever its history
+  function dayLists(state) {
+    const all = Object.values(state.items).sort((a, b) => (a.id < b.id ? -1 : 1));
+    const counts = { total: all.filter(i => !i.unknown).length, STARTED: 0, READY: 0, SEALED: 0, PACKED: 0, LOADED: 0, RECEIVED: 0, PLACED: 0, none: 0, photos: 0, unknown: all.filter(i => i.unknown).length };
+    for (const i of all) { counts[i.last ? i.last.type : "none"]++; if (i.photos.length) counts.photos++; }
+    const transit = all.filter(i => i.loaded && !i.arrived);
+    const byContainer = {};
+    for (const i of transit) (byContainer[i.container || "(no container noted)"] = byContainer[i.container || "(no container noted)"] || []).push(i);
+    return {
+      counts,
+      onboard: transit.filter(i => i.phase === "ONBOARD"), onTheWay: transit.filter(i => i.phase === "TRANSIT"), delivered: transit.filter(i => i.phase === "DELIVERED"),
+      containers: Object.values(state.containers || {}).filter(c => c.loaded || c.events.length).sort((a, b) => (a.name < b.name ? -1 : 1))
+        .map(c => Object.assign(c, { notAboard: c.wave ? all.filter(i => !i.unknown && !i.loaded && !i.received && i.plannedWave === c.wave) : [] })),
+      packing: all.filter(i => i.last && i.last.type === "STARTED"), readyToSeal: all.filter(i => i.last && i.last.type === "READY"), sealed: all.filter(i => isSealed(i)),
+      // waveOf: the wave it was loaded in once it has been, otherwise the plan. An item that arrived without a loading scan keeps its planned wave.
+      plan: WAVES.concat([""]).map(w => { const inW = all.filter(i => !i.unknown && waveOf(i) === w), n = k => inW.filter(i => stateOf(i) === k).length;
+        return { wave: w, total: inW.length, notLoaded: n("NOTLOADED"), onboard: n("ONBOARD"), transit: n("TRANSIT"), delivered: n("DELIVERED"), arrived: n("IN") }; }),
+      mustNotLoaded: all.filter(i => i.w1 === "MUST" && !i.loaded && !i.received),     // arrived means it got there, loading scan or not
+      canGo: all.filter(i => i.w1 === "OK" && !i.loaded && !i.received),
+      inTransit: transit, byContainer
+    };
+  }
+
+  // A label scanned again ALWAYS stops the session until a person acknowledges it. The scan cannot tell "same box twice" from
+  // "a second box wearing the same label" — with several helpers a true duplicate can turn up seconds later — so a person decides,
+  // helped by when and by whom the first scan was made. Nothing is counted; one SEEN row is kept as evidence.
+  function agoText(ts, now) {
+    const m = Math.max(0, Math.round(((now || Date.now()) - Date.parse(ts)) / 60000));
+    if (m < 1) return "just now"; if (m < 60) return m + " min ago";
+    const h = Math.floor(m / 60); return h < 48 ? h + " h" + (m % 60 ? " " + (m % 60) + " min" : "") + " ago" : Math.round(h / 24) + " days ago";
+  }
+  function repeatVerdict(prev, what, doing, now) {
+    return { log: false, seen: true, tone: "alert", head: what, when: `${agoText(prev.ts, now)}${prev.who ? " by " + prev.who : ""}`, note: `scanned again while ${doing}, ${agoText(prev.ts, now)} after ${prev.type}${prev.who ? " by " + prev.who : ""}`,
+      text: `${what} ${agoText(prev.ts, now)}${prev.who ? " by " + prev.who : ""}. Same box again? Carry on. A different box? Set it aside — two boxes share this label.` };
+  }
+  // What should happen when a label is scanned during a run. Pure decision; the caller logs and announces it.
+  // The journey, forward only once something has left: 0 packing · 1 aboard · 2 on the way · 3 delivered, not unloaded · 4 arrived · 5 in its room.
+  // Before step 2 a change is a minor correction; from step 2 on, any action that would put the item at an EARLIER step is questioned first.
+  const JOURNEY = { STARTED: 0, READY: 0, SEALED: 0, PACKED: 0, LOADED: 1, RECEIVED: 4, PLACED: 5 };
+  const journeyOf = item => !item || !item.loaded && !item.received ? 0 : item.last && item.last.type === "PLACED" ? 5 : item.received ? 4 : item.phase === "DELIVERED" ? 3 : item.phase === "TRANSIT" ? 2 : 1;
+  const JOURNEY_WORDS = ["packing", "aboard", "on the way", "delivered, not unloaded", "arrived", "in its room"];
+  const verbFor = name => (/TRUCK|VAN|TRAILER|LORRY/i.test(name || "") ? "departed" : "picked up");   // pods are picked up; trucks depart
+  const CONTAINER_RE = /^[A-Z0-9][A-Z0-9 _-]{0,29}$/;   // the same rule the Drive script applies to a pod or truck name when it is marked; checked at loading so no container can be named in a way the script will later refuse
+  function runVerdict(item, run, now, cts, confirmed) {
+    if (run.type === "SEALED") {
+      if (item && item.loaded) return repeatVerdict(item.loaded, `Already loaded${item.container ? " in " + item.container : ""}`, "sealing", now);
+      if (isSealed(item)) return repeatVerdict(item.last, "Already sealed", "sealing", now);
+      if (!item || !item.last || item.last.type !== "READY") return { log: true, tone: "warn", text: "Sealed — it was never marked ready to seal" };
+      if (!item.photos.length) return { log: true, tone: "warn", text: "Sealed — no photo of the contents on record" };
+      return { log: true, tone: "ok", text: "Sealed" };
+    }
+    if (run.type === "LOADED") {
+      const cont = run.container && cts && cts[run.container];                            // a used container is refused before any other question: no answer could proceed
+      if (cont && cont.used) return { log: false, tone: "alert", head: `${run.container} has already been ${cont.last.type === "DEPARTED" ? verbFor(run.container) : cont.last.type === "DELIVERED" ? "delivered" : "returned to the shipper"}`,
+        when: `${agoText(cont.last.ts, now)}${cont.last.who ? " by " + cont.last.who : ""}. A container is used once — nothing can be loaded into it now. Finish this session and start one with a new name.`, text: "Container already used" };
+      if (item && item.loaded && !item.arrived) return repeatVerdict(item.loaded, `Already loaded${item.container ? " in " + item.container : ""}`, "loading", now);
+      if (item && item.received && !confirmed) { const arr = item.history.filter(e => e.type === "RECEIVED" || e.type === "PLACED").pop();
+        return { log: false, ask: "trip", tone: "ask", head: "This one already made its trip",
+          when: `${item.loaded ? `Loaded into ${item.container || "a container"}${item.loaded.wave ? " (" + item.loaded.wave.replace(/^W/, "Wave ") + ")" : ""} ${agoText(item.loaded.ts, now)}${item.loaded.who ? " by " + item.loaded.who : ""}; ` : ""}${arr.type === "PLACED" ? "placed in its room" : "arrived"} ${agoText(arr.ts, now)}${arr.who ? " by " + arr.who : ""}. Loading it again means a second trip — or the wrong label.`,
+          yes: "Load it again — a second trip", no: "Don't load it — check first", note: `second trip: already ${arr.type === "PLACED" ? "placed" : "arrived"}${item.container ? " from " + item.container : ""}` }; }
+      if (item && item.plannedWave && run.wave && item.plannedWave !== run.wave) return { log: false, ask: "wave", tone: "ask", planned: item.plannedWave, text: "Planned for a different wave" };   // a person decides: change the plan and load it, or leave it off
+
+      if (item && item.id[0] === "B" && !isSealed(item)) return { log: true, tone: "warn", text: "Loaded — it was never marked sealed" };   // boxes only; furniture and equipment are not sealed
+      return { log: true, tone: "ok", text: "Loaded" };
+    }
+    if (run.type === "RECEIVED" || run.type === "PLACED") {
+      const cont = item && item.loaded && item.container && cts && cts[item.container];
+      if (cont && cont.returned && !item.arrived && !confirmed) return { log: false, ask: "returned", tone: "ask", container: item.container,
+        head: `${item.container} was returned to the shipper ${agoText(cont.last.ts, now)}`, when: `This box is still recorded aboard it. Either it came out without a scan, or it went back with the container.`,
+        yes: run.type === "PLACED" ? "Placed anyway — record it" : "Arrived anyway — record it", no: "Don't record — check first", note: `out of turn: ${item.container} already returned to shipper` };
+      if (cont && !item.arrived && !item.departed && !item.delivered && !confirmed) return { log: false, ask: "notleft", tone: "ask", container: item.container,
+        head: `${item.container} was never marked ${verbFor(item.container)}`, when: `Loaded in it ${agoText(item.loaded.ts, now)}${item.loaded.who ? " by " + item.loaded.who : ""}.`,
+        alt: `Mark ${item.container} ${verbFor(item.container)} and delivered now, then record`,
+        yes: run.type === "PLACED" ? "Placed anyway — record it" : "Arrived anyway — record it", no: "Don't record — check first", note: `out of turn: ${item.container} not marked ${verbFor(item.container)}` };
+    }
+    if (run.type === "RECEIVED") {
+      if (item && item.arrived) return repeatVerdict(item.history.filter(e => e.type === "RECEIVED" || e.type === "PLACED").pop(), "Already checked in", "unloading", now);
+      if (!item || !item.loaded) return { log: true, tone: "warn", text: "Arrived — it was never scanned at loading" };
+      return { log: true, tone: "ok", text: "Arrived" };
+    }
+    if (run.type === "PLACED") {
+      if (item && item.last && item.last.type === "PLACED") return repeatVerdict(item.last, "Already placed", "placing", now);
+      return { log: true, tone: "ok", text: "Placed" };
+    }
+    if (item && item.last && item.last.type === run.type) return { log: false, tone: "dup", text: "Already marked " + run.type.toLowerCase() };
+    return { log: true, tone: "ok", text: run.type[0] + run.type.slice(1).toLowerCase() };
+  }
+
+  const csvCell = v => { const s = String(v == null ? "" : v).replace(/\r\n?/g, "\n"); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+  const eventsCsv = evs => [EV_COLS.join(",")].concat(evs.map(e => EV_COLS.map(c => csvCell(e[c])).join(","))).join("\n") + "\n";
+
+  // Photo file name, fixed at capture: <ID>_<YYYYMMDD>_<HHMMSS>_<who>.jpg — local time, because that is what a person browsing the folder expects.
+  function photoName(id, d, who) {
+    const p = n => String(n).padStart(2, "0");
+    const w = (who || "").replace(/[^A-Za-z0-9]/g, "").slice(0, 12) || "X";
+    return `${id}_${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}_${w}.jpg`;
+  }
+
+  // Rows logged by the first version of this app become events with a stable id, so importing twice changes nothing.
+  const fromV1Sighting = s => ({ event_id: `v1-${s.id}-${s.checkpoint}-${s.timestamp}`.replace(/[^A-Za-z0-9:._-]/g, ""), ts: s.timestamp, who: s.who || "", id: s.id, type: s.checkpoint,
+    field: "", value: "", container: s.container || "", wave: "", location: s.location || "", photo: s.photo || "", note: s.note || "" });
+
+  // ---- storage: small things in localStorage (shared with v1), events and photos in IndexedDB ----
+  const APP_VERSION = "Box app 3.10 (2026-09-24)";
+  const $ = id => document.getElementById(id);
+  const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const store = { get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } },
+                  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { return false; } } };
+  const idb = {
+    db: null,
+    open() { return new Promise(res => { if (!window.indexedDB) return res(false);
+      const rq = indexedDB.open("lot26", 2);
+      rq.onupgradeneeded = () => { const d = rq.result; if (!d.objectStoreNames.contains("kv")) d.createObjectStore("kv"); if (!d.objectStoreNames.contains("photos")) d.createObjectStore("photos", { keyPath: "key" }); if (!d.objectStoreNames.contains("thumbs")) d.createObjectStore("thumbs"); };
+      let waited = false;
+      rq.onsuccess = () => { idb.db = rq.result;
+        // a LATER version of this app opening in another tab must never be held up by this one: let go, then reload into the new version
+        idb.db.onversionchange = () => { try { idb.db.close(); } catch (e) {} idb.db = null; setStatus("This app was just updated in another tab — reloading this one.", "warn"); setTimeout(() => location.reload(), document.hidden ? 0 : 1500); };
+        if (waited) setStatus("The older copy is closed — carrying on.", "ok"); res(true); };
+      rq.onerror = () => res(false);
+      // An older copy of the app open elsewhere holds the storage. Do NOT start without it (records made meanwhile could overwrite waiting ones):
+      // say so and wait — the request completes by itself the moment the other copy is closed.
+      rq.onblocked = () => { waited = true; setStatus("An older copy of this app is still open in another Chrome tab or window. Close that one — this one carries on by itself.", "warn"); $("pill").textContent = "Waiting…"; }; }); },
+    tx(name, mode, fn) { return new Promise((res, rej) => { if (!idb.db) return rej(new Error("no storage"));
+      const t = idb.db.transaction(name, mode); const out = fn(t.objectStore(name)); t.oncomplete = () => res(out && out.result); t.onerror = t.onabort = () => rej(t.error || new Error("storage")); }); },
+    get: k => idb.tx("kv", "readonly", s => s.get(k)).catch(() => null),
+    set: (k, v) => idb.tx("kv", "readwrite", s => s.put(v, k)),
+    putPhoto: rec => idb.tx("photos", "readwrite", s => s.put(rec)),
+    delPhoto: key => idb.tx("photos", "readwrite", s => s.delete(key)),
+    getPhoto: key => idb.tx("photos", "readonly", s => s.get(key)).catch(() => null),
+    getThumb: name => idb.tx("thumbs", "readonly", s => s.get(name)).catch(() => null),
+    putThumb: (name, blob) => idb.tx("thumbs", "readwrite", s => s.put(blob, name)).catch(() => {}),
+    delThumb: name => idb.tx("thumbs", "readwrite", s => s.delete(name)).catch(() => {}),
+    photos: nsName => idb.tx("photos", "readonly", s => s.getAll()).then(a => (a || []).filter(p => p.ns === nsName)).catch(() => [])
+  };
+
+  let cfg = Object.assign({ who: "", url: "", token: "", photoMax: 2560, practice: false }, store.get("lot26.cfg") || {});
+  let inventory = store.get("lot26.inventory") || null;      // {rows, loaded, name, modified, copies} — same key v1 uses
+  let local = [], server = [], state = { items: {}, undone: new Set() }, lists = null;
+  let run = store.get("lot26.run") || null;                  // {type, container, wave, count}
+  let currentId = null, dirty = false, photosWaiting = 0;
+  const sync = { busy: false, again: false, lastOk: 0, lastTry: 0, lastPull: 0, error: "", code: "", server: store.get("lot26.server") || "" };
+  const noteServer = v => { if (!v || v === sync.server) return; sync.server = v; store.set("lot26.server", v);
+    let again = 0; for (const e of local) if (e.rejected) { delete e.rejected; e.synced = false; again++; } if (again) persistLocal(); };   // the script changed: entries it refused before get one more try
+  const serverOlderThan = (maj, min) => { const m = /dropbox (\d+)\.(\d+)/.exec(sync.server || ""); return !!m && (+m[1] < maj || (+m[1] === maj && +m[2] < min)); };
+  const scriptNeedsUpdate = need => { setStatus(`The Drive script answering this phone is ${(/dropbox [\d.]+/.exec(sync.server || "") || ["an older one"])[0].replace("dropbox ", "version ")}; this needs version ${need || "a newer one"}. In the script editor: paste the new Code.gs, put the passphrase back, then Deploy → Manage deployments → pencil → New version. Then “Save and test” here.`, "warn"); return true; };
+  const thumbURL = {}, fullURL = {};                          // photo name -> objectURL (small / full), filled as they are needed
+  const ns = () => (cfg.practice ? "test" : "live");
+
+  // ---- recompute + render ----
+  function recompute() {
+    state = deriveState(inventory ? inventory.rows : [], mergeEvents(server, local));
+    lists = dayLists(state);
+    renderHeader(); renderPill(); renderRun(); fillNames(); renderResetButton(); renderDayLists(); renderWhere(); renderJournal(); renderReadyStrip();
+  }
+  function renderHeader() {
+    $("practice").hidden = !cfg.practice;
+    const el = $("inv-status");
+    if (!inventory) { el.textContent = cfg.url ? "No inventory yet — it arrives with the first sync." : "No inventory yet. Open “Settings and sync”, or load inventory.csv by hand."; return; }
+    const when = new Date(inventory.loaded).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+    el.textContent = `${inventory.rows.length} items · inventory from ${inventory.name || "file"}, ${when}` + (inventory.copies > 1 ? ` · Drive holds ${inventory.copies} files named inventory.csv — using the newest` : "");
+    el.className = "sub" + (inventory.copies > 1 ? " warn" : "");
+  }
+  const pending = () => local.filter(e => !e.synced).length;
+  function renderPill() {
+    const p = $("pill"), n = pending();
+    let text, cls;
+    if (!cfg.url || !cfg.token) { text = n ? `${n} on this phone only` : "This phone only"; cls = "quiet"; }
+    else if (sync.busy) { text = n ? `Saving ${n}…` : "Checking…"; cls = "wait"; }
+    else if (sync.code === "auth" || sync.code === "setup") { text = "Sync problem — tap"; cls = "bad"; }
+    else if (n) { text = `${n} waiting — will retry`; cls = "wait"; }
+    else if (sync.error) { text = "Offline — all kept here"; cls = "wait"; }
+    else if (!sync.lastOk) { text = "Not synced yet"; cls = "wait"; }
+    else { text = "All saved"; cls = "ok"; }
+    p.textContent = text; p.className = "pill quiet " + (cls === "quiet" ? "" : cls);
+    const d = $("sync-detail");
+    d.textContent = (sync.lastOk ? `Last sync ${new Date(sync.lastOk).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}. ` : "") + (sync.error ? `Last attempt: ${sync.error}` : "") + (local.some(e => e.rejected) ? ` ${local.filter(e => e.rejected).length} entr${local.filter(e => e.rejected).length === 1 ? "y was" : "ies were"} refused by the server — see “Recorded on this phone”.` : "");
+    d.className = "note" + (sync.error ? " warn" : "");
+  }
+  function renderJournal() {
+    const n = pending();
+    $("journal-note").textContent = `${local.length} entr${local.length === 1 ? "y" : "ies"} recorded here${cfg.practice ? " (practice)" : ""}; ${n} not yet saved to Drive; ${photosWaiting} photo${photosWaiting === 1 ? "" : "s"} waiting to upload.` +
+      (local.some(e => e.rejected) ? " Refused: " + local.filter(e => e.rejected).map(e => `${e.id} ${e.type} (${e.rejected})`).join("; ") : "");
+  }
+  const describe = i => { const r = i.row; return [disp(stageOf(r)), (r.contents || "").trim(), (r.unprinted_contents || "").trim().split("\n")[0]].filter(Boolean).join(" — "); };
+  const idButtons = arr => `<div class="idlist">${arr.map(i => `<button class="quiet" data-open="${i.id}"><b>${CLASSWORD[i.id[0]] || ""} ${i.id.slice(1)}</b><span>${esc(describe(i))}</span></button>`).join("")}</div>`;
+  const readyButtons = arr => `<div class="idlist">${arr.map(i => `<button class="quiet" data-open="${i.id}"><b>${CLASSWORD[i.id[0]] || ""} ${i.id.slice(1)}</b><span>${esc([describe(i), "ready since " + whenText(i.last.ts) + (i.last.who ? " (" + i.last.who + ")" : ""), i.photos.length ? "" : "no photo yet"].filter(Boolean).join(" · "))}</span></button>`).join("")}</div>`;
+  function renderReadyStrip() { const n = lists.readyToSeal.length, b = $("ready-strip"); b.hidden = !n || !!(run && run.type === "SEALED"); b.textContent = `${n} box${n === 1 ? "" : "es"} ready to seal — show`; }
+  $("ready-strip").onclick = () => { $("d-where").open = true; const t = document.getElementById("ready-list") || $("d-where"); t.scrollIntoView({ block: "start", behavior: "smooth" }); };
+  function cardToTop(smooth) { const box = $("result"); if (!box.firstElementChild) return; const el = box.querySelector(".label") || box;   // the card itself: it sits 14 px inside its container
+    const pad = ($("practice").hidden ? 0 : $("practice").offsetHeight) + ($("runbar").hidden ? 0 : $("runbar").offsetHeight + 8);
+    window.scrollTo({ top: Math.max(0, el.getBoundingClientRect().top + window.scrollY - pad), behavior: smooth ? "smooth" : "auto" }); }
+  function wireOpen(root) { root.querySelectorAll("[data-open]").forEach(b => b.onclick = () => { show(b.dataset.open); cardToTop(true); }); }
+
+  // items still aboard, grouped by the wave they were loaded in and then by container — a divider per group, nothing more
+  function groupedTransit(items) {
+    const groups = {}, order = ["W1", "W2", "W3", ""];
+    for (const i of items) { const w = (i.loaded && i.loaded.wave) || "", c = i.container || "(no container noted)", k = w + "\u0000" + c; (groups[k] = groups[k] || { w, c, items: [] }).items.push(i); }
+    return Object.values(groups).sort((a, b) => (order.indexOf(a.w) - order.indexOf(b.w)) || (a.c < b.c ? -1 : a.c > b.c ? 1 : 0));
+  }
+  const transitHeading = g => `${g.w ? esc(waveFull(g.w, state.names)) : "No wave noted"} · ${esc(g.c)}${state.containers[g.c] && state.containers[g.c].last ? " — " + esc(state.containers[g.c].last.type === "DEPARTED" ? verbFor(g.c) : state.containers[g.c].last.type === "DELIVERED" ? "delivered" : "returned to shipper") : ""}`;
+  function renderDayLists() {
+    const el = $("daylists"); if (!run) { el.innerHTML = ""; return; }
+    let h = "";
+    if (run.type === "SEALED") {
+      h += lists.readyToSeal.length ? `<div class="daylist"><h2>Ready to seal (${lists.readyToSeal.length})</h2>${readyButtons(lists.readyToSeal)}</div>` : `<div class="daylist done">Nothing is waiting to be sealed.</div>`;
+    } else if (run.type === "LOADED") {
+      h += lists.mustNotLoaded.length ? `<div class="daylist"><h2>Must go — not loaded yet (${lists.mustNotLoaded.length})</h2>${idButtons(lists.mustNotLoaded)}</div>`
+        : `<div class="daylist done">Every “Must go” item is loaded.</div>`;
+      if (lists.canGo.length) h += `<div class="daylist"><h2>Can go if there's room (${lists.canGo.length})</h2>${idButtons(lists.canGo)}</div>`;
+    } else if (run.type === "RECEIVED") {
+      const gs = groupedTransit(lists.inTransit);
+      h += gs.length ? `<div class="daylist"><h2>Loaded, not checked in yet (${lists.inTransit.length})</h2>${gs.map(g => `<h3 class="divider">${transitHeading(g)} (${g.items.length})</h3>${idButtons(g.items)}`).join("")}</div>`
+        : `<div class="daylist done">Everything that was loaded has been checked in.</div>`;
+    }
+    el.innerHTML = h; wireOpen(el);
+  }
+  function renderWhere() {
+    const c = lists.counts, el = $("where");
+    el.innerHTML = `<div class="counts">
+        <span>Items in the inventory</span><b>${c.total}</b>
+        <span>Not started</span><b>${c.none}</b>
+        <span>Packing in progress</span><b>${lists.packing.length}</b>
+        <span>Full — ready to seal</span><b>${lists.readyToSeal.length}</b>
+        <span>Sealed, waiting for moving day</span><b>${lists.sealed.length}</b>
+        <span>Loaded, container not picked up yet</span><b>${lists.onboard.length}</b>
+        <span>On the way</span><b>${lists.onTheWay.length}</b>
+        <span>Delivered, not unloaded yet</span><b>${lists.delivered.length}</b>
+        <span>Arrived</span><b>${c.RECEIVED}</b><span>In their rooms</span><b>${c.PLACED}</b>
+        <span>With at least one photo</span><b>${c.photos}</b>
+        ${c.unknown ? `<span>Scanned, but not in the inventory</span><b>${c.unknown}</b>` : ""}
+      </div>
+      <div class="daylist"><h2>Plan by wave</h2>${lists.plan.map(x => `<div class="counts" style="margin:4px 0 8px"><span><b style="text-align:left">${esc(x.wave ? waveFull(x.wave, state.names) : "No wave planned yet")}</b></span><b>${x.total}</b>
+        ${x.total ? `<span class="note" style="grid-column:1 / -1;margin:0">${[["notLoaded", "not loaded yet"], ["onboard", "loaded, waiting for pick-up"], ["transit", "on the way"], ["delivered", "delivered, not unloaded"], ["arrived", "arrived"]].filter(([k]) => x[k]).map(([k, w]) => `${x[k]} ${w}`).join(" · ")}</span>` : ""}</div>`).join("")}</div>
+      ${lists.readyToSeal.length ? `<div class="daylist" id="ready-list"><h2>Ready to seal (${lists.readyToSeal.length})</h2>${readyButtons(lists.readyToSeal)}</div>` : ""}
+      ${lists.packing.length ? `<div class="daylist"><h2>Packing in progress (${lists.packing.length})</h2>${idButtons(lists.packing)}</div>` : ""}
+      ${lists.containers.length ? `<div class="daylist"><h2>Pods and trucks</h2>${lists.containers.map(containerCard).join("")}</div>` : ""}
+      ${lists.mustNotLoaded.length ? `<div class="daylist"><h2>Must go — not loaded yet (${lists.mustNotLoaded.length})</h2>${idButtons(lists.mustNotLoaded)}</div>` : ""}
+      ${lists.inTransit.length ? `<div class="daylist"><h2>Loaded, not checked in (${lists.inTransit.length})</h2>${groupedTransit(lists.inTransit).map(g => `<h3 class="divider">${transitHeading(g)} (${g.items.length})</h3>${idButtons(g.items)}`).join("")}</div>` : ""}
+      <p class="note">${APP_VERSION}</p>`;
+    wireOpen(el);
+    el.querySelectorAll("[data-cmark]").forEach(b => b.onclick = () => markContainer(b.dataset.c, b.dataset.cmark));
+    el.querySelectorAll("[data-cundo]").forEach(b => b.onclick = () => undoContainer(b.dataset.c));
+  }
+  // One entry for the whole pod or truck. The item-by-item scans stay the audit record; this only says where the container is.
+  const containerWords = { DEPARTED: "on the way", DELIVERED: "delivered", RETURNED: "returned to shipper" };
+  const markWord = (name, type) => (type === "DELIVERED" ? "delivered" : type === "RETURNED" ? "returned to shipper" : verbFor(name));
+  function containerCard(c) {
+    const evident = !!(c.evidentTs && c.last && c.last.type === "DEPARTED");     // "evidently delivered" only while it is still marked as on the way
+    const st = evident ? `evidently delivered — ${c.checkedIn} box${c.checkedIn === 1 ? "" : "es"} from it checked in at the other end since ${whenText(c.evidentTs)}${c.evidentWho ? " (" + esc(c.evidentWho) + ")" : ""}; not marked`
+      : c.last ? `${c.last.type === "DEPARTED" ? verbFor(c.name) + " — on the way" : c.last.type === "DELIVERED" ? "delivered" : "returned to shipper — finished"} since ${whenText(c.last.ts)}${c.last.who ? " (" + esc(c.last.who) + ")" : ""}` : `still here — not marked ${verbFor(c.name)} yet`;
+    const next = evident ? ["DELIVERED", `Mark ${esc(c.name)} as delivered`] : !c.last ? ["DEPARTED", `Mark ${esc(c.name)} as ${verbFor(c.name)}`] : c.last.type === "DEPARTED" ? ["DELIVERED", `Mark ${esc(c.name)} as delivered`] : c.last.type === "DELIVERED" ? ["RETURNED", `Mark ${esc(c.name)} as returned to shipper`] : null;
+    const aboard = c.loaded - c.checkedIn, na = c.notAboard || [];
+    return `<div class="panel" style="margin-top:8px"><p class="ptitle">${esc(c.name)}${c.wave ? " · " + esc(waveFull(c.wave, state.names)) : ""}</p>
+      <p style="margin:0 0 4px;font-size:17px"><b>Status:</b> ${st}</p>
+      <p class="note" style="margin:0 0 6px;font-size:15px">${c.loaded} loaded · ${aboard} still aboard · ${c.checkedIn} checked in at the other end</p>
+      ${c.returned && aboard ? `<p class="note warn" style="margin:0 0 6px">${aboard} box${aboard === 1 ? "" : "es"} loaded into ${esc(c.name)} ${aboard === 1 ? "was" : "were"} never checked in and the container has gone back — ${aboard === 1 ? "it is" : "they are"} missing unless ${aboard === 1 ? "it" : "they"} came out without a scan. See "Loaded, not checked in".</p>` : ""}
+      ${c.outOfTurn ? `<p class="note warn" style="margin:0 0 6px">${c.outOfTurn} box${c.outOfTurn === 1 ? " was" : "es were"} checked in at the other end although ${esc(c.name)} was never marked ${verbFor(c.name)} — someone confirmed it out of turn; check the records.</p>` : ""}
+      ${!c.last && c.wave ? (na.length ? `<details style="margin:0 0 8px"><summary class="note warn" style="cursor:pointer">Planned for ${esc(waveShort(c.wave))} but not aboard: ${na.length} — check before it leaves</summary>${idButtons(na)}</details>` : `<p class="note" style="margin:0 0 8px;color:var(--ok)">Everything planned for ${esc(waveShort(c.wave))} is aboard.</p>`) : ""}
+
+      <div class="row">${next ? `<button data-c="${esc(c.name)}" data-cmark="${next[0]}">${next[1]}</button>` : ""}${c.last && !c.undoLocked ? `<button class="quiet" data-c="${esc(c.name)}" data-cundo="1">Undo “${markWord(c.name, c.last.type)}”</button>` : ""}</div>${c.undoLocked ? `<p class="note" style="margin:8px 0 0">Undone once. A correction goes back one step only; for anything bigger, ask the design chat.</p>` : ""}</div>`;
+  }
+  async function markContainer(name, type) {
+    const c = state.containers[name]; if (!c) return;
+    if (serverOlderThan(1, type === "RETURNED" ? 6 : 1) && scriptNeedsUpdate(type === "RETURNED" ? "1.6" : "1.1")) return;
+    const n = c.loaded - c.checkedIn;
+    const na = (c.notAboard || []).length;
+    if (type === "RETURNED" && !confirm(`Mark ${name} as returned to the shipper?\n\nThis ends its use.${n ? `\n${n} box${n === 1 ? " is" : "es are"} still recorded aboard and never checked in — ${n === 1 ? "it" : "they"} will be listed as missing.` : " Everything loaded into it has been checked in."}`)) return;
+    if (type !== "RETURNED" && !confirm(type === "DEPARTED" ? `Mark ${name} as ${verbFor(name)} and on its way?\n\n${n} item${n === 1 ? " is" : "s are"} aboard.${na ? `\n${na} box${na === 1 ? "" : "es"} planned for ${waveShort(c.wave)} ${na === 1 ? "is" : "are"} NOT aboard and will stay behind — check the list on the card first.` : ""}` : `Mark ${name} as delivered?\n\n${n} item${n === 1 ? "" : "s"} still to unload and check in.`)) return;
+    await record(mkEvent(cfg.who, "", type, { container: name, wave: c.wave || "" })); setStatus(`${name}: ${type === "DEPARTED" ? verbFor(name) + " — on the way" : type === "DELIVERED" ? "delivered" : "returned to shipper"}.`, "ok");
+  }
+  async function undoContainer(name) {
+    const c = state.containers[name]; if (!c || !c.last || c.undoLocked || !confirm(`Undo “${markWord(name, c.last.type)}” for ${name}?\n\nThis goes back one step; a second undo is not offered.`)) return;
+    await record(mkEvent(cfg.who, "", "UNDO", { value: c.last.event_id, container: name })); setStatus("Undone.", "ok");
+  }
+
+  // ---- recording ----
+  async function persistLocal() { try { await idb.set(ns() + ":local", local); } catch (e) { setStatus("This phone's storage refused the entry. Free some space, then try again.", "warn"); } }
+  async function record(ev) {
+    const it = ev.id && state.items[ev.id], first = ev.id && (!it || !it.last) && (ev.type === "PHOTO" || (ev.type === "EDIT" && /^unprinted_/.test(ev.field) && ev.value));
+    if (first && !serverOlderThan(1, 2)) { const st = mkEvent(ev.who, ev.id, "STARTED", { note: "auto: first photo or description", ts: new Date(Date.parse(ev.ts) - 1).toISOString() }); st.synced = false; local.push(st); }
+    ev.synced = false; local.push(ev); recompute(); await persistLocal(); syncSoon(1200); return ev;
+  }
+  const lastCheckpointOf = id => { const it = state.items[id]; return it && it.last; };
+
+  // ---- sync ----
+  async function api(action, payload) {
+    const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), action === "photo" ? 120000 : 30000);
+    try {
+      const res = await fetch(cfg.url, { method: "POST", redirect: "follow", signal: ctl.signal, headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify(Object.assign({ token: cfg.token, action, practice: !!cfg.practice }, payload || {})) });
+      if (!res.ok) throw new Error("The sync address answered with an error (" + res.status + ").");
+      let j; try { j = await res.json(); } catch (e) { throw new Error("The sync address did not answer as expected — check that it ends in /exec."); }
+      if (!j.ok) { const er = new Error(j.detail || j.error || "refused"); er.code = j.error; throw er; }
+      return j;
+    } finally { clearTimeout(timer); }
+  }
+  const wire = e => { const o = {}; for (const c of EV_COLS) o[c] = e[c] == null ? "" : e[c]; return o; };
+  const toBase64 = blob => new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(String(fr.result).split(",")[1] || ""); fr.onerror = () => rej(fr.error); fr.readAsDataURL(blob); });
+  let syncTimer = null;
+  function syncSoon(ms) { clearTimeout(syncTimer); syncTimer = setTimeout(syncNow, ms || 50); }
+
+  async function syncNow(forcePull) {
+    if (!cfg.url || !cfg.token) { renderPill(); return; }
+    if (sync.busy) { sync.again = true; return; }
+    sync.busy = true; sync.lastTry = Date.now(); renderPill();
+    const mode = ns();
+    try {
+      let unsent = local.filter(e => !e.synced && e.type !== "PHOTO");
+      while (unsent.length) {
+        const chunk = unsent.splice(0, 100), r = await api("events", { events: chunk.map(wire) });
+        const done = new Set([].concat(r.accepted || [], r.duplicates || [])), bad = {}; (r.rejected || []).forEach(x => bad[x.event_id] = x.why);
+        for (const e of chunk) { if (done.has(e.event_id)) e.synced = true; else if (bad[e.event_id]) { e.synced = true; e.rejected = bad[e.event_id]; } }
+        await persistLocal(); renderPill();
+      }
+      for (const rec of (await idb.photos(mode)).filter(p => !p.refused)) {
+        const e = local.find(x => x.event_id === rec.key);
+        try {
+          await api("photo", { filename: rec.name, data: await toBase64(rec.blob), event: wire(rec.event) });
+          await idb.delPhoto(rec.key); photosWaiting = Math.max(0, photosWaiting - 1); if (e) e.synced = true;
+        } catch (er) {
+          if (!/^photo/.test(er.code || "")) throw er;                       // connection or passphrase trouble: stop and retry later
+          rec.refused = er.message; await idb.putPhoto(rec); if (e) { e.synced = true; e.rejected = er.message; }   // the server said no to this one: keep the file here, move on
+        }
+        await persistLocal(); renderPill();
+      }
+      const s = (forcePull === true || Date.now() - sync.lastPull > 45000) ? await api("state") : null;
+      if (s) noteServer(s.version);
+      if (s && mode === ns()) {
+        sync.lastPull = Date.now();
+        if (s.inventory_csv) { const rows = Papa.parse(s.inventory_csv, { header: true, skipEmptyLines: true }).data;
+          if (rows.length && "id" in rows[0]) { inventory = { rows, loaded: new Date().toISOString(), name: "Drive", modified: s.inventory_modified, copies: s.inventory_copies }; store.set("lot26.inventory", inventory); } }
+        server = Papa.parse(s.events_csv || "", { header: true, skipEmptyLines: true }).data.filter(e => e.event_id);
+        await idb.set(mode + ":server", server).catch(() => {});
+        if (mode === "test") await honourPracticeReset();
+      }
+      sync.lastOk = Date.now(); sync.error = ""; sync.code = "";
+    } catch (e) {
+      sync.code = e.code || "";
+      sync.error = e.code === "auth" ? "The passphrase was not accepted." : e.code === "setup" ? "The script has no passphrase set yet." : e.name === "AbortError" ? "No answer in time — will retry." : (navigator.onLine === false ? "No connection — will retry." : (e.message || "Could not reach the sync address."));
+    } finally {
+      sync.busy = false; recompute(); if (currentId && !dirty) show(currentId);
+      if (sync.again) { sync.again = false; syncSoon(500); }
+    }
+  }
+  setInterval(() => { if (document.hidden || !cfg.url) return; const idle = Date.now() - Math.max(sync.lastOk, sync.lastTry);
+    if ((pending() && idle > 20000) || (run && idle > 60000) || idle > 180000) syncNow(idle > 60000); }, 10000);
+  window.addEventListener("online", () => syncSoon(500));
+  document.addEventListener("visibilitychange", () => { if (document.hidden) { if (scanning) stopScan(); } else syncSoon(800); });
+
+  // ---- settings ----
+  const waveName = w => { const v = state.names["wave:" + w], n = (v != null ? v : (WAVE_DEFAULTS[w] || "")).trim(); return n || waveShort(w); };
+  function fillNames() { ["W1", "W2", "W3"].forEach(w => { const el = $("name-" + w); el.oninput = () => { el.dataset.dirty = "1"; }; if (!el.dataset.dirty) el.value = (state.names["wave:" + w] != null ? state.names["wave:" + w] : WAVE_DEFAULTS[w]); }); }
+  async function saveNames() { let n = 0;
+    for (const w of ["W1", "W2", "W3"]) { const v = $("name-" + w).value.trim(), cur = (state.names["wave:" + w] != null ? state.names["wave:" + w] : WAVE_DEFAULTS[w]);
+      if (v !== cur) { if (serverOlderThan(1, 3)) { scriptNeedsUpdate("1.3"); return -1; } await record(mkEvent(cfg.who, "", "NAME", { field: "wave:" + w, value: v })); n++; } delete $("name-" + w).dataset.dirty; }
+    return n; }
+  function renderResetButton() { $("cfg-reset").hidden = !cfg.practice; }
+  function fillSettings() { $("cfg-who").value = cfg.who; $("cfg-url").value = cfg.url; $("cfg-token").value = cfg.token; $("cfg-photo").value = String(cfg.photoMax); $("cfg-practice").checked = !!cfg.practice; }
+  async function loadNamespace() { local = (await idb.get(ns() + ":local")) || []; server = (await idb.get(ns() + ":server")) || []; photosWaiting = (await idb.photos(ns())).length; }
+  async function saveSettings() {
+    const was = ns();
+    cfg = { who: $("cfg-who").value.trim(), url: $("cfg-url").value.trim(), token: $("cfg-token").value.trim(), photoMax: parseInt($("cfg-photo").value, 10) || 0, practice: $("cfg-practice").checked };
+    store.set("lot26.cfg", cfg);
+    sync.lastPull = 0;
+    if (cfg.who && (await saveNames()) < 0) return;
+    if (!cfg.who) { setStatus("Type your first name in the first box — it goes on every record and photo this phone makes. Then tap “Save and test” again.", "warn"); $("cfg-who").focus(); recompute(); return; }
+    if (was !== ns()) { currentId = null; $("result").innerHTML = ""; endRun(); await loadNamespace(); }
+    recompute();
+    if (!cfg.url || !cfg.token) { setStatus("Saved. Add the sync address and passphrase to turn on sync.", "ok"); return; }
+    setStatus("Testing the connection…");
+    try { const r = await api("ping"); noteServer(r.version); setStatus(`Connected to ${r.version}${cfg.practice ? " — practice mode" : ""}.`, "ok"); if (cfg.who) $("d-settings").open = false; sync.error = ""; sync.code = ""; sync.lastPull = 0; syncSoon(); }
+    catch (e) { sync.code = e.code || ""; sync.error = e.message; renderPill(); setStatus("Could not connect: " + e.message, "warn"); }
+  }
+  // ---- practice reset: only ever practice records. The Drive script trashes the practice file and photo folder and starts a fresh file
+  //      whose first row is a RESET marker; every phone that sees a new marker clears its own practice records made before it.
+  async function clearPracticeBefore(tsISO) {
+    const gone = local.filter(e => e.ts <= tsISO); for (const e of gone.concat(server)) if (e.type === "PHOTO" && e.photo) { await idb.delThumb(e.photo); delete thumbURL[e.photo]; delete fullURL[e.photo]; }
+    for (const rec of await idb.photos("test")) if (((rec.event || {}).ts || "") <= tsISO) await idb.delPhoto(rec.key);
+    local = local.filter(e => e.ts > tsISO); photosWaiting = (await idb.photos("test")).length; await persistLocal();
+    currentId = null; $("result").innerHTML = ""; $("hit").hidden = true; if (run) endRun();
+  }
+  async function honourPracticeReset() {
+    const marks = server.filter(e => e.type === "RESET"); if (!marks.length) return;
+    const last = marks[marks.length - 1]; if (store.get("lot26.practiceReset") === last.event_id) return;
+    await clearPracticeBefore(last.ts); store.set("lot26.practiceReset", last.event_id);
+    setStatus(`Practice was reset${last.who ? " by " + last.who : ""} — this phone's practice records are cleared too.`, "ok");
+  }
+  $("cfg-reset").onclick = async () => {
+    if (!cfg.practice) return;
+    if (!confirm("Reset practice?\n\nEvery practice record and practice photo is cleared — on Drive (to the trash) and on both phones. Live records are never touched.")) return;
+    try {
+      if (cfg.url && cfg.token) { if (serverOlderThan(1, 4)) { scriptNeedsUpdate("1.4"); return; }
+        setStatus("Resetting practice…"); const r = await api("practice_reset", { who: cfg.who });
+        server = []; await idb.set("test:server", server).catch(() => {}); await clearPracticeBefore(r.reset_at); store.set("lot26.practiceReset", r.reset_id);
+        recompute(); sync.lastPull = 0; syncSoon(200);
+        setStatus(`Practice reset: ${r.trashed_photos} photo${r.trashed_photos === 1 ? "" : "s"} and the practice record moved to Drive's trash. The other phone clears itself at its next sync.`, "ok");
+      } else { server = []; await clearPracticeBefore(new Date().toISOString()); recompute(); setStatus("Practice records on this phone cleared.", "ok"); }
+    } catch (e) { setStatus("Reset did not finish: " + (e.message || "no connection") + ". Nothing was changed on this phone.", "warn"); }
+  };
+  $("cfg-save").onclick = saveSettings;
+  $("cfg-sync").onclick = () => { setStatus("Syncing…"); syncNow(true).then(() => setStatus(sync.error ? "Sync did not finish: " + sync.error : "Synced.", sync.error ? "warn" : "ok")); };
+  $("cfg-link").onclick = async () => {
+    if (!cfg.url || !cfg.token) { setStatus("Save the sync address and passphrase first.", "warn"); return; }
+    const link = location.origin + location.pathname + "#setup=" + encodeURIComponent(btoa(JSON.stringify({ u: cfg.url, t: cfg.token })));
+    try { await navigator.clipboard.writeText(link); setStatus("Setup link copied. Send it to the other phone and open it there in Chrome.", "ok"); } catch (e) { prompt("Copy this setup link:", link); }
+  };
+  $("pill").onclick = () => { $("d-settings").open = true; $("d-settings").scrollIntoView({ block: "start", behavior: "smooth" }); if (cfg.url) syncNow(true); };
+  function applySetupLink() {
+    const m = location.hash.match(/^#setup=(.+)$/); if (!m) return false;
+    try { const o = JSON.parse(atob(decodeURIComponent(m[1]))); if (o.u && o.t) { cfg.url = o.u; cfg.token = o.t; store.set("lot26.cfg", cfg); } } catch (e) {}
+    history.replaceState(null, "", location.pathname + location.search);
+    return true;
+  }
+
+  // ---- inventory by hand (fallback) ----
+  function useInventory(rows, name) {
+    if (!rows.length || !("id" in rows[0])) { setStatus("No “id” column found — is this inventory.csv?", "warn"); return; }
+    inventory = { rows, loaded: new Date().toISOString(), name: name || "file", copies: 1 }; store.set("lot26.inventory", inventory); recompute(); setStatus(`Loaded ${rows.length} items.`, "ok");
+  }
+  $("btn-paste").onclick = () => { const b = $("paste-box"); b.hidden = !b.hidden; if (!b.hidden) $("paste-text").focus(); };
+  $("btn-paste-inv").onclick = () => { const t = $("paste-text").value.trim(); if (!t) { setStatus("Paste the CSV text first.", "warn"); return; } useInventory(Papa.parse(t, { header: true, skipEmptyLines: true }).data, "pasted text"); };
+  $("file-inv").onchange = e => { const f = e.target.files[0]; if (!f) return;
+    Papa.parse(f, { header: true, skipEmptyLines: true, complete: res => useInventory(res.data, f.name), error: er => setStatus("Could not read that file: " + er.message, "warn") }); e.target.value = ""; };
+
+  // ---- the box card ----
+  const DEST_CHOICES = Array.from(new Set(Object.keys(DEST_TO_STAGE).concat(Object.keys(STAGE)))).sort((a, b) => disp(a).localeCompare(disp(b)));
+  function labelBlock(id, st) {
+    if (!st) return `<div class="block" style="background:#777"><div class="top"><span></span><span>${CLASSWORD[id[0]] || id[0]} ${id.slice(1)}</span></div><div class="stage">Not in the inventory</div></div>`;
+    const [fill, ink] = STAGE[st] || ["#888", "white"];
+    return `<div class="block ${fill === "hazard" ? "hazard" : ""} ${ink === "black" ? "dark-ink" : ""}" ${fill !== "hazard" ? `style="background:${fill}"` : ""}>
+        <div class="top"><span>${floorOf(st)}</span><span>${CLASSWORD[id[0]] || id[0]} ${id.slice(1)}</span></div><div class="stage">${disp(st)}</div></div>`;
+  }
+  const whenText = ts => { const d = new Date(ts); return isNaN(d) ? ts : d.toLocaleString([], { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }); };
+  const cpWords = { STARTED: "Packing started", READY: "Full — ready to seal", SEALED: "Sealed, 5 labels on", PACKED: "Packed (older entry)", LOADED: "Loaded", RECEIVED: "Arrived", PLACED: "Placed in room", SEEN: "Seen" };
+  const phaseWords = { ONBOARD: "loaded, not picked up yet", TRANSIT: "on the way", DELIVERED: "delivered, not unloaded yet" };
+
+  function show(id, keep) {
+    currentId = id; dirty = !!keep;
+    const out = $("result"), it = state.items[id];
+    if (!inventory && !it) { out.innerHTML = `<div class="empty">No inventory on this phone yet. Set up sync, or load inventory.csv by hand (both are further down).</div>`; return; }
+    const r = it ? it.row : { id, class: id[0] }, base = (it && it.base) || {};
+    const st = stageOf(r), dest = (r.dest || "").trim().toUpperCase();
     const fields = [];
-    if (r.wave) fields.push(["Wave", r.wave.replace(/^W/i,"Wave ")]);
+    if (r.wave) fields.push(["Wave", waveFull(r.wave.toUpperCase(), state.names)]);
+    if (it && it.container) fields.push(["Container", it.container + (it.phase && it.phase !== "IN" ? " — " + phaseWords[it.phase] : "")]);
     if (r.from_tx) fields.push(["From Texas", TX[r.from_tx.trim().toUpperCase()] || r.from_tx]);
-    if (r.set_id) fields.push(["Set", `${r.set_id} — part ${r.part_n||"?"} of ${r.part_total||"?"}`]);
+    if (r.set_id) fields.push(["Set", `${r.set_id} — part ${r.part_n || "?"} of ${r.part_total || "?"}`]);
     if (r.packed_by || r.packed_date) fields.push(["Packed", [r.packed_by, r.packed_date].filter(Boolean).join(", ")]);
-    if (r.status) fields.push(["Status", r.status]);
-    if (r.photo) fields.push(["Photo", r.photo]);
     const hand = [r.contents, r.notes].filter(x => x && x.trim()).join("\n");
-    const unp = [r.unprinted_contents, r.unprinted_notes, r.private_notes].filter(x => x && x.trim()).join("\n");
-    const sights = (chklog ? chklog.rows.filter(x => (x.id||"").trim().toUpperCase() === id) : []).concat(sightings.filter(x => x.id === id));
+    const had = (k, v) => (keep && keep[k] != null ? keep[k] : v);
+    const uc = had("uc", r.unprinted_contents || ""), un = had("un", [r.unprinted_notes, r.private_notes].filter(x => x && x.trim()).join("\n"));
+    const pw = it ? it.plannedWave : "";
+    const lc = had("lc", r.contents || ""), ln = had("ln", r.notes || ""), labelChanged = !!(it && (it.edits.contents !== undefined || it.edits.notes !== undefined));
+    const hist = it ? it.history : [], nPhotos = it ? it.photos.length : 0, w1 = it ? it.w1 : "";
     out.innerHTML = `
       <div class="label">
-        <div class="block ${fill === "hazard" ? "hazard" : ""} ${ink === "black" ? "dark-ink" : ""}" ${fill !== "hazard" ? `style="background:${fill}"` : ""}>
-          <div class="top"><span>${floorOf(st)}</span><span>${CLASSWORD[id[0]]||id[0]} ${id.slice(1)}</span></div>
-          <div class="stage">${disp(st)}</div>
-        </div>
+        ${labelBlock(id, !it || it.unknown ? null : st)}
         <div class="body">
-          <div class="final">Final location<b>${dest ? disp(dest) + (floorOf(dest) && floorOf(dest) !== floorOf(st) ? ` <span style="font-size:14px;color:#555">(${floorOf(dest)})</span>` : "") : "— write-in (not recorded yet)"}</b></div>
-          ${r.set_id ? `<div class="setband">Set of ${r.part_total||"?"} — do not separate — part ${r.part_n||"?"}</div>` : ""}
+          ${!it || it.unknown ? `<p class="note warn">This number isn't in the inventory on this phone. You can still record it; sync to refresh the inventory.</p>` : ""}
+          <div class="final">Final location<b>${dest ? disp(dest) + (floorOf(dest) && floorOf(dest) !== floorOf(st) ? ` <span style="font-size:14px;color:#555">(${floorOf(dest)})</span>` : "") : "— written on the label by hand; not recorded yet"}</b></div>
+          ${r.set_id ? `<div class="setband">Set of ${r.part_total || "?"} — do not separate — part ${r.part_n || "?"}</div>` : ""}
           ${hand ? `<div class="hand">${esc(hand)}</div>` : ""}
-          ${unp ? `<div class="unprinted">${esc(unp)}</div>` : ""}
-          ${fields.length ? `<dl>${fields.map(([k,v]) => `<dt>${k}</dt><dd>${esc(v)}</dd>`).join("")}</dl>` : ""}
-          ${sights.length ? `<div class="sight">Seen: <ul>${sights.map(s => `<li>${esc(s.checkpoint)} — ${esc(s.timestamp||"")}${s.container ? " · " + esc(s.container) : ""}${s.location ? " · " + esc(s.location) : ""}</li>`).join("")}</ul></div>` : ""}
-          <div class="chips">
-            ${["PACKED","LOADED","RECEIVED","PLACED"].map(c => `<button class="quiet" data-cp="${c}" data-id="${id}">Log ${c.toLowerCase()}</button>`).join("")}
+          ${labelChanged ? `<p class="note" style="color:#555">Label text was changed after the first label was printed — the remaining labels will carry it.</p>` : ""}
+          ${fields.length ? `<dl>${fields.map(([k, v]) => `<dt>${k}</dt><dd>${esc(v)}</dd>`).join("")}</dl>` : ""}
+          <div class="edit">
+            ${it && it.loaded && it.loaded.wave ? "" : `<div class="elabel">Which wave is it planned for?</div>
+            <div class="chips">${WAVES.map(w => `<button class="quiet ${pw === w ? "on" : ""}" data-wave="${w}">${esc(waveFull(w, state.names))}</button>`).join("")}</div>`}
+            ${pw === "W1" && !(it && it.loaded && it.loaded.wave) ? `<div class="elabel">Going in ${esc(waveName("W1"))}?</div>
+            <div class="chips">${Object.keys(W1_WORDS).map(k => `<button class="quiet ${w1 === k ? "on" : ""}" data-w1="${k}">${W1_WORDS[k]}</button>`).join("")}</div>` : ""}
+            ${!(base.dest || "").trim() ? `<label class="field">Final location written on this label<select id="ed-dest"><option value="">— choose —</option>${DEST_CHOICES.map(d => `<option value="${d}" ${d === dest ? "selected" : ""}>${esc(disp(d))}</option>`).join("")}</select></label>` : ""}
+            <label class="field">What's inside — kept off the label<textarea id="ed-uc" rows="3">${esc(uc)}</textarea></label>
+            <label class="field">Notes — kept off the label<textarea id="ed-un" rows="2">${esc(un)}</textarea></label>
+            <div class="row" style="margin-top:10px"><button class="save" id="ed-save">Save details</button><button class="quiet" id="ed-photo">Take a photo</button></div>
+            <div class="thumbs">${(it ? it.photos : []).map((ph, i) => `<button class="ptile" data-ph="${i}" aria-label="Open photo ${i + 1}">${thumbURL[ph.name] ? `<img src="${thumbURL[ph.name]}" alt="">` : `<span>Photo ${i + 1}<small>tap to open</small></span>`}</button>`).join("")}</div>
+            <div class="pcount">${nPhotos ? `${nPhotos} photo${nPhotos === 1 ? "" : "s"} recorded for this one` : "No photos yet"}</div>
+            <details class="labeltext" ${keep && keep.open ? "open" : ""}><summary>Change what's printed on the remaining labels</summary>
+              <p class="note" style="color:#8a4b00">Anyone who can see the box can read this, and it goes into the QR. Leave valuables out — those belong in “What's inside”, above.</p>
+              <label class="field">Contents to print<input id="ed-lc" type="text" maxlength="90" autocomplete="off" value="${esc(lc)}"></label>
+              <label class="field">Note to print<input id="ed-ln" type="text" maxlength="60" autocomplete="off" value="${esc(ln)}"></label>
+              <p class="note" style="color:#555">The label already on the box stays as it is. Staging and final location never change.</p>
+              <div class="row" style="margin-top:8px"><button class="quiet" id="ed-lsave">Save label text</button></div>
+            </details>
           </div>
+          ${hist.length ? `<div class="sight">So far: <ul>${hist.map(s => `<li>${cpWords[s.type] || s.type} — ${esc(whenText(s.ts))}${s.container ? " · " + esc(s.container) : ""}${s.location ? " · " + esc(disp(s.location)) : ""}${s.who ? " · " + esc(s.who) : ""}</li>`).join("")}</ul></div>` : ""}
+          <div class="elabel">Packing</div>
+          <div class="chips">${PACK_STATES.map(c => `<button class="quiet ${it && it.last && (it.last.type === c || (c === "SEALED" && it.last.type === "PACKED")) ? "on" : ""}" data-cp="${c}">${cpWords[c]}</button>`).join("")}</div>
+          <div class="elabel">Moving</div>
+          <div class="chips">${MOVE_STATES.map(c => `<button class="quiet ${it && it.last && it.last.type === c ? "on" : ""}" data-cp="${c}">${cpWords[c]}</button>`).join("")}</div>
+          ${it && it.last ? `<div class="chips"><button class="quiet" id="ed-undo">Undo “${cpWords[it.last.type]}” — it was a mistake</button></div>` : ""}
         </div>
       </div>`;
-    out.querySelectorAll("[data-cp]").forEach(b => b.onclick = () => logSighting(b.dataset.id, b.dataset.cp));
-    out.scrollIntoView({ block: "nearest" });
+    if (browse && browse.ids[browse.i] === id) setTimeout(() => decorateBrowseCard(), 0);
+    const keepNow = keepFields;
+    ["ed-uc", "ed-un", "ed-lc", "ed-ln"].forEach(k => $(k).oninput = () => { dirty = true; });
+    $("ed-lsave").onclick = async () => {
+      const k = keepFields(); let n = 0;
+      if (k.lc.trim() !== (r.contents || "").trim()) { await record(mkEvent(cfg.who, id, "EDIT", { field: "contents", value: k.lc.trim() })); n++; }
+      if (k.ln.trim() !== (r.notes || "").trim()) { await record(mkEvent(cfg.who, id, "EDIT", { field: "notes", value: k.ln.trim() })); n++; }
+      show(id, { uc: k.uc, un: k.un, open: true }); setStatus(n ? "Label text saved. It prints on this box's remaining labels." : "Nothing had changed.", "ok");
+    };
+    out.querySelectorAll("[data-wave]").forEach(b => b.onclick = async () => { if (serverOlderThan(1, 5)) { scriptNeedsUpdate("1.5"); return; }
+      const k = keepNow(), d = dirty; await record(mkEvent(cfg.who, id, "EDIT", { field: "wave", value: pw === b.dataset.wave ? "" : b.dataset.wave })); show(id, d ? k : null); });
+    out.querySelectorAll("[data-w1]").forEach(b => b.onclick = async () => { const k = keepNow(), d = dirty; await record(mkEvent(cfg.who, id, "EDIT", { field: "w1", value: w1 === b.dataset.w1 ? "" : b.dataset.w1 })); show(id, d ? k : null); });
+    if ($("ed-dest")) $("ed-dest").onchange = async e => { const k = keepNow(), d = dirty; await record(mkEvent(cfg.who, id, "EDIT", { field: "dest", value: e.target.value })); show(id, d ? k : null); setStatus("Final location recorded.", "ok"); };
+    $("ed-save").onclick = async () => {
+      const k = keepNow(); let n = 0;
+      if (k.uc.trim() !== (r.unprinted_contents || "").trim()) { await record(mkEvent(cfg.who, id, "EDIT", { field: "unprinted_contents", value: k.uc.trim() })); n++; }
+      if (k.un.trim() !== [r.unprinted_notes, r.private_notes].filter(x => x && x.trim()).join("\n").trim()) { await record(mkEvent(cfg.who, id, "EDIT", { field: "unprinted_notes", value: k.un.trim() })); n++; }
+      show(id, k.open ? { lc: k.lc, ln: k.ln, open: true } : null); setStatus(n ? "Details saved." : "Nothing had changed.", "ok");
+    };
+    $("ed-photo").onclick = () => { photoFor = id; $("cam").click(); };
+    out.querySelectorAll(".ptile").forEach(b => { const ph = it.photos[+b.dataset.ph]; b.onclick = () => openViewer(id, ph);
+      if (!thumbURL[ph.name]) idb.getThumb(ph.name).then(bl => { if (bl && b.isConnected) { thumbURL[ph.name] = URL.createObjectURL(bl); b.innerHTML = `<img src="${thumbURL[ph.name]}" alt="">`; } }); });
+    out.querySelectorAll("[data-cp]").forEach(b => b.onclick = () => logCheckpoint(id, b.dataset.cp, keepNow()));
+    if ($("ed-undo")) $("ed-undo").onclick = async () => { const last = lastCheckpointOf(id); if (!last || !confirm(`Undo “${cpWords[last.type]}” for ${CLASSWORD[id[0]]} ${id.slice(1)}?`)) return;
+      const k = keepNow(), d = dirty; await record(mkEvent(cfg.who, id, "UNDO", { value: last.event_id })); show(id, d ? k : null); setStatus("Undone.", "ok"); };
   }
-  const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 
-  // ---- sightings (kept on this device; copy into checkpoint_log.csv later) ----
-  function logSighting(id, cp) {
-    let container = "", location = "";
-    if (cp === "LOADED") container = (prompt("Container (e.g. POD1, TRUCK-W2):", sightings.length ? sightings[sightings.length-1].container || "" : "") || "").trim();
-    if (cp === "RECEIVED" || cp === "PLACED") location = (prompt("Where (stage area or room):", byId[id] ? stageOf(byId[id]) : "") || "").trim();
-    sightings.push({ id, checkpoint: cp, timestamp: new Date().toISOString(), container, location, who: "", photo: "", note: "" });
-    store.set("lot26.sightings", sightings); renderLog(); show(id); setStatus(`${CLASSWORD[id[0]]} ${id.slice(1)}: ${cp.toLowerCase()} logged.`, "ok");
+  const missingBeforeSeal = it => [(!it || !it.photos.length) ? "no photo of the contents" : "", (!it || !(it.row.unprinted_contents || it.row.contents || "").trim()) ? "no description of what's inside" : ""].filter(Boolean);
+  function keepFields() { if (!$("ed-uc")) return null; const lt = document.querySelector("#result .labeltext");
+    return { uc: $("ed-uc").value, un: $("ed-un").value, lc: $("ed-lc").value, ln: $("ed-ln").value, open: !!(lt && lt.open) }; }
+  async function logCheckpoint(id, cp, keep) {
+    const it = state.items[id], extra = {}, name = `${CLASSWORD[id[0]]} ${id.slice(1)}`;
+    if (it && it.last && (it.last.type === cp || (cp === "SEALED" && it.last.type === "PACKED"))) { setStatus(`${name} was already marked “${cpWords[cp]}” ${agoText(it.last.ts)}${it.last.who ? " by " + it.last.who : ""}. Nothing added.`, "ok"); return; }
+    if (PACK_STATES.includes(cp) && serverOlderThan(1, 2) && scriptNeedsUpdate("1.2")) return;
+    const cur = journeyOf(it), to = JOURNEY[cp];
+    if (cur >= 2 && to < cur) {                                                                  // it has left: going backwards is questioned
+      const why = cp === "LOADED" ? `${name} already made its trip — it is ${JOURNEY_WORDS[cur]}. Loading it again means a second trip, or the wrong label.` : `${name} is ${JOURNEY_WORDS[cur]}. Marking it “${cpWords[cp]}” would move it backwards in the workflow.`;
+      if (!confirm(`${why}\n\nA mistake in an earlier entry is fixed with Undo, not by marking it again. Record “${cpWords[cp]}” anyway?`)) return;
+      extra.note = `backwards from ${JOURNEY_WORDS[cur]}, confirmed`; }
+    else if ((cp === "RECEIVED" || cp === "PLACED") && cur === 1 && it.container) {           // arriving from a container that never left: the same question the scan session asks
+      if (!confirm(`${it.container} was never marked ${verbFor(it.container)}, and ${name} is still recorded as aboard.\n\nRecord “${cpWords[cp]}” anyway?`)) return;
+      extra.note = `out of turn: ${it.container} not marked ${verbFor(it.container)}`; }
+    if (cp === "READY" || cp === "SEALED") { const miss = missingBeforeSeal(it);
+      if (miss.length && !confirm(`${name}: ${miss.join(" and ")} yet.\n\n${cp === "SEALED" ? "Once it is taped, adding them means opening it again. Mark it sealed anyway?" : "Mark it ready to seal anyway?"}`)) return; }
+    if (cp === "LOADED") {                                                                  // the same choice a loading session offers: a container still being loaded, or a new name
+      const pk = await pickContainer(id, it);
+      if (!pk) { setStatus(`${name}: nothing recorded.`, "ok"); return; }
+      extra.container = pk.container; extra.wave = pk.wave;
+      if (it && it.plannedWave && pk.wave && pk.wave !== it.plannedWave)                       // as at the door: the wave it is loaded in becomes the plan, with a note saying so
+        await record(mkEvent(cfg.who, id, "EDIT", { field: "wave", value: pk.wave, note: "changed on the card while loading " + pk.container })); }
+    if (cp === "RECEIVED") extra.location = it ? stageOf(it.row) : "";
+    if (cp === "PLACED") extra.location = it ? ((it.row.dest || "").trim().toUpperCase() || stageOf(it.row)) : "";
+    const d = dirty; await record(mkEvent(cfg.who, id, cp, extra)); show(id, d ? keep : null);
+    setStatus(`${CLASSWORD[id[0]]} ${id.slice(1)}: ${cpWords[cp].toLowerCase()} recorded.`, "ok");
   }
-  function csvRows() {
-    const q = v => `"${String(v||"").replace(/"/g,'""')}"`;
-    return ["id,checkpoint,timestamp,container,location,who,photo,note"].concat(sightings.map(s => [s.id,s.checkpoint,s.timestamp,s.container,s.location,s.who,s.photo,s.note].map(q).join(","))).join("\n");
-  }
-  function renderLog() { $("log-view").textContent = sightings.length ? csvRows() : "(none yet)"; }
-  $("btn-copy").onclick = async () => { try { await navigator.clipboard.writeText(csvRows()); setStatus("Rows copied.", "ok"); } catch(e) { setStatus("Copy blocked — select the text in the box and copy it manually.", "warn"); } };
-  $("btn-share").onclick = async () => { if (navigator.share) { try { await navigator.share({ title: "Lot 26 sightings", text: csvRows() }); } catch(e) {} } else setStatus("Sharing isn't available here — use Copy rows.", "warn"); };
-  $("btn-clearlog").onclick = () => { if (confirm("Clear the rows logged on this device? Make sure they've been copied into checkpoint_log.csv first.")) { sightings = []; store.set("lot26.sightings", sightings); renderLog(); } };
+  const lastContainer = () => { const all = mergeEvents(server, local); for (let i = all.length - 1; i >= 0; i--) if (all[i].container) return all[i].container; return ""; };
+  const usedText = c => `${c.name} has already been ${c.last.type === "DEPARTED" ? verbFor(c.name) : c.last.type === "DELIVERED" ? "delivered" : "returned to the shipper"} (${whenText(c.last.ts)}). A container is used once — give this one a new name.`;
+  const loadingTargets = () => Object.values(state.containers).filter(c => c.loaded && !c.used).sort((a, b) => a.name.localeCompare(b.name));   // still being loaded; a container marked anything is finished as a target
 
-  // ---- manual lookup ----
-  $("btn-go").onclick = () => { const id = parseId($("manual").value); if (!id) { setStatus("Enter a number like 052, or F013 / E002.", "warn"); return; } show(id); };
-  $("manual").addEventListener("keydown", e => { if (e.key === "Enter") $("btn-go").onclick(); });
+  // ---- "Which container?" for the card's Loaded: chips for containers still being loaded (each with its wave), or a new name; the wave is shown, never assumed ----
+  let picking = null;
+  function pickContainer(id, it) {
+    return new Promise(resolve => {
+      const targets = loadingTargets(), planned = (it && it.plannedWave) || "", inRun = run && run.type === "LOADED" ? run : null;
+      picking = { id, planned, targets, resolve };
+      $("pick-id").textContent = `${CLASSWORD[id[0]]} ${id.slice(1)}`;
+      $("pick-known-label").hidden = !targets.length; $("pick-container-label").textContent = (targets.length ? "Or type a new name" : "Type a name") + " (POD1, TRUCK …); a new name starts a new container";
+      $("pick-known").innerHTML = targets.map(c => `<button class="quiet" data-known="${esc(c.name)}" data-wave="${esc(c.wave || "")}">${esc(c.name)}${c.wave ? " · " + esc(waveShort(c.wave)) : ""}</button>`).join("");
+      $("pick-known").querySelectorAll("button").forEach(b => b.onclick = () => { $("pick-container").value = b.dataset.known; if (b.dataset.wave) $("pick-wave").value = b.dataset.wave; pickRefresh(); });
+      $("pick-wave").innerHTML = ["W1", "W2", "W3"].map(w => `<option value="${w}">${esc(waveFull(w, state.names))}</option>`).join("") + `<option value="">Not decided</option>`;
+      $("pick-wave").value = inRun ? inRun.wave : planned;                                    // a paused loading session: its container and wave are the default
+      $("pick-container").value = inRun ? inRun.container : "";
+      pickRefresh(); $("pick").hidden = false;
+      if (!targets.length && !inRun) $("pick-container").focus();                              // with chips on screen, no keyboard until a name is typed
+    });
+  }
+  function pickRefresh(msg, bad) {                                                            // chips follow the typed name; the note says what the choice means, or why it was refused
+    if (!picking) return;
+    const cn = $("pick-container").value.trim().toUpperCase(), w = $("pick-wave").value, name = $("pick-id").textContent;
+    $("pick-known").querySelectorAll("button").forEach(b => b.classList.toggle("on", b.dataset.known === cn));
+    let note = msg || "";
+    if (!note && picking.planned && w && w !== picking.planned) note = `${name} is planned for ${waveShort(picking.planned)}; loading it${cn ? " into " + cn : ""} records it as ${waveShort(w)} and changes the plan to match.`;
+    else if (!note && picking.planned && !w) note = `No wave chosen: ${name} keeps its plan, ${waveShort(picking.planned)}.`;
+    else if (!note && cn && !picking.targets.some(c => c.name === cn) && !(state.containers[cn] && state.containers[cn].used)) note = `${cn} is a new container — this starts it.`;
+    $("pick-note").textContent = note; $("pick-note").hidden = !note; $("pick-note").classList.toggle("bad", !!bad);
+  }
+  function pickDone(result) { const pk = picking; picking = null; $("pick").hidden = true; if (pk) pk.resolve(result); }
+  $("pick-container").addEventListener("input", () => pickRefresh()); $("pick-wave").addEventListener("change", () => pickRefresh());
+  $("pick-container").addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); $("pick-yes").click(); } });
+  $("pick").addEventListener("keydown", e => { if (e.key === "Escape") pickDone(null); });
+  $("pick-no").onclick = () => pickDone(null);
+  $("pick-yes").onclick = () => {
+    if (!picking) return;
+    const cn = $("pick-container").value.trim().toUpperCase();
+    if (!cn) { pickRefresh("Name the container first — tap one above, or type a new name.", true); $("pick-container").focus(); return; }
+    if (!CONTAINER_RE.test(cn)) { pickRefresh("A container name is letters, digits, spaces, - or _ — up to 30 characters.", true); $("pick-container").focus(); return; }
+    const u = state.containers[cn]; if (u && u.used) { pickRefresh(usedText(u), true); return; }
+    pickDone({ container: cn, wave: $("pick-wave").value });
+  };
+
+  // ---- photo viewer: full size from this phone if it is still here, otherwise fetched from Drive; "remove" sets the file aside, never deletes it ----
+  let viewing = null;
+  const b64ToBlob = (b64, mime) => { const bin = atob(b64), u8 = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i); return new Blob([u8], { type: mime || "image/jpeg" }); };
+  async function openViewer(id, ph) {
+    viewing = { id, ph }; const img = $("viewer-img"), msg = $("viewer-msg");
+    $("viewer-cap").textContent = `${CLASSWORD[id[0]]} ${id.slice(1)} · ${whenText(ph.ts)}${ph.who ? " · " + ph.who : ""}`; img.removeAttribute("src"); img.hidden = true; msg.textContent = "Opening…"; $("viewer").hidden = false;
+    try {
+      if (!fullURL[ph.name]) { const rec = await idb.getPhoto(ph.event_id);
+        if (rec && rec.blob) fullURL[ph.name] = URL.createObjectURL(rec.blob);
+        else { if (!cfg.url) throw new Error("This photo is not on this phone, and sync is not set up.");
+          if (serverOlderThan(1, 3)) { $("viewer").hidden = true; scriptNeedsUpdate("1.3"); return; }
+          const r = await api("photo_get", { filename: ph.name }), bl = b64ToBlob(r.data, r.mime); fullURL[ph.name] = URL.createObjectURL(bl);
+          if (!thumbURL[ph.name]) { const small = await shrink(bl, 320); await idb.putThumb(ph.name, small); thumbURL[ph.name] = URL.createObjectURL(small); } } }
+      if (viewing && viewing.ph === ph) { img.src = fullURL[ph.name]; img.hidden = false; msg.textContent = ""; }
+    } catch (e) { msg.textContent = "Could not open it: " + (e.message || "no connection") + (navigator.onLine === false ? " (no connection)" : ""); }
+  }
+  function closeViewer() { $("viewer").hidden = true; viewing = null; if (currentId && !dirty) show(currentId); }
+  $("viewer-close").onclick = closeViewer;
+  $("viewer-del").onclick = async () => {
+    if (!viewing) return; const { id, ph } = viewing;
+    if (!confirm("Remove this photo from the box's record?\n\nThe file is not destroyed: in Drive it moves to a “_removed” folder.")) return;
+    const pendingRec = await idb.getPhoto(ph.event_id);
+    if (pendingRec) { await idb.delPhoto(ph.event_id); photosWaiting = Math.max(0, photosWaiting - 1); local = local.filter(e => e.event_id !== ph.event_id); await persistLocal(); recompute(); }   // never left this phone: just drop it
+    else { if (serverOlderThan(1, 3)) { scriptNeedsUpdate("1.3"); return; } await record(mkEvent(cfg.who, id, "UNDO", { value: ph.event_id, photo: ph.name, note: "photo removed" })); }
+    await idb.delThumb(ph.name); delete thumbURL[ph.name]; delete fullURL[ph.name];
+    $("viewer").hidden = true; viewing = null; const k = keepFields(), d = dirty; if (currentId === id) show(id, d ? k : null); setStatus("Photo removed from the record.", "ok");
+  };
+
+  // ---- photos: named here, at capture, so nobody names or sorts anything later ----
+  let photoFor = null;
+  async function shrink(file, maxEdge) {
+    if (!maxEdge || !window.createImageBitmap) return file;
+    try {
+      const bmp = await createImageBitmap(file, { imageOrientation: "from-image" }), s = Math.min(1, maxEdge / Math.max(bmp.width, bmp.height));
+      const c = document.createElement("canvas"); c.width = Math.round(bmp.width * s); c.height = Math.round(bmp.height * s);
+      c.getContext("2d").drawImage(bmp, 0, 0, c.width, c.height); if (bmp.close) bmp.close();
+      const out = await new Promise(res => c.toBlob(res, "image/jpeg", 0.86));
+      return out || file;
+    } catch (e) { return file; }
+  }
+  $("cam").onchange = async e => {
+    const f = e.target.files[0], id = photoFor; e.target.value = ""; if (!f || !id) return;
+    setStatus("Keeping the photo…");
+    try {
+      const blob = await shrink(f, cfg.photoMax), when = new Date(), name = photoName(id, when, cfg.who);
+      const ev = mkEvent(cfg.who, id, "PHOTO", { photo: name, ts: when.toISOString() });
+      await idb.putPhoto({ key: ev.event_id, ns: ns(), name, blob, event: wire(ev) });
+      photosWaiting++; const small = await shrink(blob, 320); await idb.putThumb(name, small); thumbURL[name] = URL.createObjectURL(small); fullURL[name] = URL.createObjectURL(blob);
+      const k = keepFields(), d = dirty;
+      await record(ev); if (currentId === id) show(id, d ? k : null);
+      setStatus(`Photo kept as ${name}${cfg.url ? " — uploading" : ""}.`, "ok");
+    } catch (er) { setStatus("The photo could not be kept on this phone (storage problem). It was not recorded — take it again after freeing space.", "warn"); }
+  };
+
+  // ---- a loading / unloading run ----
+  const runWords = { SEALED: "Sealing", LOADED: "Loading", RECEIVED: "Unloading", PLACED: "Putting in rooms" };
+  let pickedType = null;
+  function renderModes() { $("main-actions").hidden = !!run || !!browse; $("browsebar").hidden = !browse || !!run; $("btn-browse").classList.toggle("on", !$("browse-setup").hidden); $("btn-scan").classList.toggle("on", scanning && !run); $("btn-scan").textContent = scanning && !run ? "Stop scanning" : "Scan Single Label"; $("btn-run").classList.toggle("on", !$("run-setup").hidden); }
+  function fillRunChoices() {
+    $("run-wave").innerHTML = ["W1", "W2", "W3"].map(w => `<option value="${w}">${esc(waveFull(w, state.names))}</option>`).join("") + `<option value="">Not decided</option>`;
+    const known = loadingTargets().map(c => c.name);
+    $("run-known-label").hidden = !known.length; $("run-known").innerHTML = known.map(c => `<button class="quiet" data-known="${esc(c)}">${esc(c)}</button>`).join("");
+    $("run-known").querySelectorAll("button").forEach(b => b.onclick = () => { $("run-container").value = b.dataset.known; $("run-known").querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b)); runStartReady(); });
+  }
+  $("btn-run").onclick = () => { const p = $("run-setup"); $("browse-setup").hidden = true; if (scanning) stopScan(); p.hidden = !p.hidden; if (!p.hidden) { currentId = null; $("result").innerHTML = ""; fillRunChoices(); $("run-container").value = lastContainer() || ""; $("containers").innerHTML = Array.from(new Set(mergeEvents(server, local).map(e => e.container).filter(Boolean))).map(c => `<option value="${esc(c)}">`).join(""); } };
+  function runStartReady() { $("run-start").disabled = !pickedType || (pickedType === "LOADED" && !$("run-container").value.trim()); }
+  $("run-container").addEventListener("input", runStartReady);
+  $("run-types").querySelectorAll("button").forEach(b => b.onclick = () => { pickedType = b.dataset.type; $("run-types").querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b)); $("run-load-fields").hidden = pickedType !== "LOADED"; runStartReady(); if (pickedType === "LOADED" && !$("run-container").value.trim()) $("run-container").focus(); });
+  $("btn-run").addEventListener("click", renderModes);
+  $("run-cancel").onclick = () => { $("run-setup").hidden = true; renderModes(); };
+  $("run-pause").onclick = () => { if (scanning || starting) stopScan(); else { beepInit(); startScan(); } };
+  $("run-start").onclick = () => {
+    if (!pickedType) return;
+    if (pickedType === "SEALED" && serverOlderThan(1, 2) && scriptNeedsUpdate("1.2")) return;
+    const container = $("run-container").value.trim().toUpperCase();
+    if (pickedType === "LOADED" && !container) { setStatus("Name the container first — POD1, TRUCK …", "warn"); $("run-container").focus(); return; }
+    if (pickedType === "LOADED" && !CONTAINER_RE.test(container)) { setStatus("A container name is letters, digits, spaces, - or _ — up to 30 characters.", "warn"); $("run-container").focus(); return; }
+    const used = pickedType === "LOADED" && state.containers[container] && state.containers[container].used;
+    if (used) { setStatus(usedText(state.containers[container]), "warn"); $("run-container").focus(); return; }
+    run = { type: pickedType, container: pickedType === "LOADED" ? container : "", wave: pickedType === "LOADED" ? $("run-wave").value : "", count: 0 };
+    store.set("lot26.run", run); $("run-setup").hidden = true; currentId = null; $("result").innerHTML = ""; recompute(); beepInit(); if (!scanning) startScan();
+  };
+  function endRun() { run = null; store.set("lot26.run", null); $("hit").hidden = true; if (scanning) stopScan(); renderRun(); renderDayLists(); }
+  $("run-end").onclick = () => { const n = run ? run.count : 0, was = run; endRun();
+    setStatus(`Finished. ${n} recorded in that session.` + (was && was.type === "LOADED" ? ` When ${was.container} is picked up, mark it under “Where everything is”.` : ""), "ok"); syncSoon(); };
+  function renderRun() {
+    $("runbar").hidden = !run; renderModes(); if (!run) return;
+    $("run-pause").textContent = scanning ? "Pause camera" : "Resume scanning";
+    $("run-what").innerHTML = `${runWords[run.type]}${run.container ? " → " + esc(run.container) : ""}${run.wave ? " · " + waveShort(run.wave) : ""}<small>${run.count} recorded this session${scanning ? "" : " — camera paused"}</small>`;
+  }
+  let lastRunHit = "", lastRunAt = 0, blocked = false, alarmTimer = null;
+  function raiseAlarm(id, v) {
+    blocked = true; $("alarm-id").textContent = `${CLASSWORD[id[0]] || id[0]} ${id.slice(1)}`; $("alarm-head").textContent = v.head || v.text; $("alarm-when").textContent = v.when || "";
+    $("alarm-p2").hidden = v.text === "Container already used"; $("alarm").hidden = false; $("alarm-ok").focus();
+    let n = 0; const sound = () => { [0, 240, 480].forEach((d, i) => setTimeout(() => beep(i % 2 ? "dup" : "warn"), d)); if (navigator.vibrate) navigator.vibrate([300, 100, 300, 100, 300]); if (++n >= 8) clearInterval(alarmTimer); };
+    sound(); clearInterval(alarmTimer); alarmTimer = setInterval(sound, 2500);                     // keeps sounding until someone answers it
+  }
+  $("alarm-ok").onclick = () => { clearInterval(alarmTimer); if (navigator.vibrate) navigator.vibrate(0); $("alarm").hidden = true; blocked = false; lastRunAt = Date.now(); };
+  let asking = null;
+  function raiseAsk(id, v, note) {
+    blocked = true; asking = { id, v, note }; const name = `${CLASSWORD[id[0]] || id[0]} ${id.slice(1)}`;
+    $("ask-id").textContent = name;
+    if (v.ask === "wave") { $("ask-head").textContent = "Planned for " + waveFull(v.planned, state.names); $("ask-when").textContent = `You are loading ${waveFull(run.wave, state.names)}${run.container ? " into " + run.container : ""}.`;
+      $("ask-yes").textContent = `Load it now — change it to ${waveShort(run.wave)}`; $("ask-no").textContent = `Don't load it — it stays ${waveShort(v.planned)}`; }
+    else { $("ask-head").textContent = v.head; $("ask-when").textContent = v.when; $("ask-yes").textContent = v.yes; $("ask-no").textContent = v.no; }
+    $("ask-alt").hidden = !v.alt; $("ask-alt").textContent = v.alt || ""; $("ask-yes").className = v.alt ? "quiet" : "";
+    $("ask").hidden = false; beep("warn"); if (navigator.vibrate) navigator.vibrate([120, 60, 120]);
+  }
+  // the missed mark, made now: the container is marked on its way and delivered by the person standing at it, with a note that it was marked late.
+  // After that the arrival is in order and records normally; the rest of the unload asks nothing.
+  $("ask-alt").onclick = async () => { const a = asking; if (!a || !run || !a.v.container) return; if (serverOlderThan(1, 1) && scriptNeedsUpdate("1.1")) return;
+    asking = null; $("ask").hidden = true; blocked = false; const c = state.containers[a.v.container] || {}, note = "marked late, at unloading";
+    await record(mkEvent(cfg.who, "", "DEPARTED", { container: a.v.container, wave: c.wave || "", note })); await record(mkEvent(cfg.who, "", "DELIVERED", { container: a.v.container, wave: c.wave || "", note }));
+    run.asked = (run.asked || []).concat([a.v.container]); store.set("lot26.run", run);
+    setStatus(`${a.v.container} marked ${verbFor(a.v.container)} and delivered (late). Carrying on.`, "ok"); await handleRunScan(a.id, true); };
+  $("ask-no").onclick = () => { const a = asking; asking = null; $("ask").hidden = true; blocked = false; lastRunAt = Date.now(); if (a) setStatus(`${CLASSWORD[a.id[0]]} ${a.id.slice(1)}: nothing recorded.`, "ok"); };
+  $("ask-yes").onclick = async () => { const a = asking; if (!a || !run) return;
+    if (a.v.ask === "wave") { if (serverOlderThan(1, 5)) { scriptNeedsUpdate("1.5"); return; }
+      asking = null; $("ask").hidden = true; blocked = false; await record(mkEvent(cfg.who, a.id, "EDIT", { field: "wave", value: run.wave, note: "changed at the door while loading " + (run.container || "") })); await handleRunScan(a.id, true, a.note); return; }
+    asking = null; $("ask").hidden = true; blocked = false; await handleRunScan(a.id, true, a.v.note);          // recorded with a note saying it was confirmed out of turn
+  };
+  async function handleRunScan(id, typed, confirmedNote) {
+    if (blocked) return;
+    const now = Date.now(); if (!typed && id === lastRunHit && now - lastRunAt < 4000) { lastRunAt = now; return; } lastRunHit = id; lastRunAt = now;
+    const it = state.items[id], v = runVerdict(it, run, now, state.containers, !!confirmedNote); let ev = null;
+    if (v.ask) { raiseAsk(id, v, confirmedNote); return; }
+    if (v.log) {
+      const extra = run.type === "SEALED" ? {} : run.type === "LOADED" ? { container: run.container, wave: run.wave } : { location: it ? (run.type === "PLACED" ? ((it.row.dest || "").trim().toUpperCase() || stageOf(it.row)) : stageOf(it.row)) : "" };
+      if (confirmedNote) extra.note = confirmedNote;
+      run.count++; store.set("lot26.run", run); ev = await record(mkEvent(cfg.who, id, run.type, extra));
+    }
+    if (v.seen) await record(mkEvent(cfg.who, id, "SEEN", { container: run.container || "", note: v.note || "" }));
+    const unknown = !it || it.unknown, tone = unknown && v.tone === "ok" ? "warn" : v.tone;
+    const cName = ev && run.type === "RECEIVED" && it && it.container, cont = cName && state.containers[cName];
+    const askMark = cont && cont.last && cont.last.type === "DEPARTED" && !(run.asked || []).includes(cName);
+    const h = $("hit"); h.hidden = false; h.className = tone;
+    h.innerHTML = `${labelBlock(id, it && !it.unknown ? stageOf(it.row) : null)}<div class="verdict"><span>${esc(v.text)}${unknown ? " — not in the inventory on this phone" : ""}</span>${ev ? `<button class="quiet" id="hit-undo">Undo</button>` : ""}<button class="quiet" id="hit-open">Open</button></div>${askMark ? `<div class="verdict askmark"><span>First box out of ${esc(cName)} — is ${esc(cName)} here?</span><button id="hit-mark">Mark ${esc(cName)} delivered</button><button class="quiet" id="hit-notnow">Not now</button></div>` : ""}`;
+    if (askMark) { run.asked = (run.asked || []).concat([cName]); store.set("lot26.run", run);
+      $("hit-mark").onclick = async () => { if (serverOlderThan(1, 1) && scriptNeedsUpdate("1.1")) return; await record(mkEvent(cfg.who, "", "DELIVERED", { container: cName, wave: cont.wave || "" })); h.querySelector(".askmark").innerHTML = `<span>${esc(cName)} marked delivered.</span>`; };
+      $("hit-notnow").onclick = () => { h.querySelector(".askmark").remove(); }; }
+    if (ev) $("hit-undo").onclick = async () => { await record(mkEvent(cfg.who, id, "UNDO", { value: ev.event_id })); run.count = Math.max(0, run.count - 1); store.set("lot26.run", run); renderRun(); h.className = "dup"; h.querySelector(".verdict span").textContent = "Undone — not recorded"; $("hit-undo").remove(); lastRunHit = ""; };
+    $("hit-open").onclick = () => { show(id); cardToTop(true); };
+    if (tone === "alert") { raiseAlarm(id, v); if (v.text === "Container already used") { $("alarm-ok").textContent = "OK — finish this session"; } else $("alarm-ok").textContent = "OK — carry on scanning"; }
+    else { beep(tone); if (navigator.vibrate) navigator.vibrate(tone === "ok" ? 60 : tone === "dup" ? [40, 60, 40] : [120, 60, 120]); }
+  }
+  let audio = null;
+  function beepInit() { try { audio = audio || new (window.AudioContext || window.webkitAudioContext)(); if (audio.state === "suspended") audio.resume(); } catch (e) {} }
+  function beep(tone) { if (!audio) return; try { const o = audio.createOscillator(), g = audio.createGain(); o.connect(g); g.connect(audio.destination);
+    o.frequency.value = tone === "ok" ? 1040 : tone === "dup" ? 420 : 640; g.gain.value = 0.18; const t = audio.currentTime, len = tone === "ok" ? 0.09 : 0.28; o.start(t); g.gain.setValueAtTime(0.18, t + len - 0.03); g.gain.linearRampToValueAtTime(0, t + len); o.stop(t + len); } catch (e) {} }
+
+  // ---- browse by room: pick an area (and/or a wave), then go through its boxes one card at a time — same card, same edits as a single scan.
+  //      The set is fixed when the pass starts, so changing a box's wave mid-pass does not make the list jump. Moving on saves what was typed.
+  let browse = store.get("lot26.browse") || null;                 // { ids, i, label }
+  const known = () => Object.values(state.items).filter(i => !i.unknown).sort((a, b) => (a.id < b.id ? -1 : 1));
+  const finalOf = i => (i.row.dest || "").trim().toUpperCase();
+  function browseMatches() { const st = $("br-stage").value, fi = $("br-final").value, wv = $("br-wave").value;
+    return known().filter(i => (!st || stageOf(i.row) === st) && (!fi || (fi === "(blank)" ? !finalOf(i) : finalOf(i) === fi)) && (wv === "*" || (i.loaded ? (i.loaded.wave || "") : i.plannedWave) === wv)); }
+  function fillBrowseChoices() {
+    const items = known(), opt = (v, t) => `<option value="${esc(v)}">${esc(t)}</option>`, keep = { s: $("br-stage").value, f: $("br-final").value, w: $("br-wave").value || "*" };
+    const stages = Array.from(new Set(items.map(i => stageOf(i.row)))).sort((a, b) => disp(a).localeCompare(disp(b))), finals = Array.from(new Set(items.map(finalOf).filter(Boolean))).sort((a, b) => disp(a).localeCompare(disp(b)));
+    $("br-stage").innerHTML = opt("", "Any stage area") + stages.map(x => opt(x, disp(x))).join("");
+    $("br-final").innerHTML = opt("", "Any final location") + finals.map(x => opt(x, disp(x))).join("") + (items.some(i => !finalOf(i)) ? opt("(blank)", "Write-in, not recorded yet") : "");
+    $("br-wave").innerHTML = opt("*", "Any wave") + WAVES.map(w => opt(w, waveFull(w, state.names))).join("") + opt("", "No wave planned yet");
+    $("br-stage").value = keep.s; $("br-final").value = keep.f; $("br-wave").value = keep.w; renderBrowseList();
+  }
+  function browseLabel() { const parts = [$("br-stage").value && disp($("br-stage").value), $("br-final").value && ($("br-final").value === "(blank)" ? "write-ins" : "→ " + disp($("br-final").value)), $("br-wave").value !== "*" && ($("br-wave").value ? waveShort($("br-wave").value) : "no wave yet")].filter(Boolean); return parts.join(" · ") || "Everything"; }
+  function renderBrowseList() { const m = browseMatches(); $("br-count").textContent = `${m.length} item${m.length === 1 ? "" : "s"} match.`; $("br-start").disabled = !m.length;
+    $("br-list").innerHTML = `<div class="idlist">${m.map((i, n) => `<button class="quiet" data-bidx="${n}"><b>${CLASSWORD[i.id[0]] || ""} ${i.id.slice(1)}</b><span>${esc(describe(i))}</span></button>`).join("")}</div>`;
+    $("br-list").querySelectorAll("[data-bidx]").forEach(b => b.onclick = () => startBrowse(m.map(i => i.id), +b.dataset.bidx)); }
+  ["br-stage", "br-final", "br-wave"].forEach(k => $(k).onchange = renderBrowseList);
+  $("btn-browse").onclick = () => { const p = $("browse-setup"); if (scanning) stopScan(); $("run-setup").hidden = true; p.hidden = !p.hidden; if (!p.hidden) { currentId = null; $("result").innerHTML = ""; fillBrowseChoices(); } renderModes(); };
+  $("br-cancel").onclick = () => { $("browse-setup").hidden = true; renderModes(); };
+  $("br-start").onclick = () => startBrowse(browseMatches().map(i => i.id), 0);
+  function startBrowse(ids, i) { if (!ids.length) return; browse = { ids, i, label: browseLabel() }; store.set("lot26.browse", browse); $("browse-setup").hidden = true; showBrowse(); }
+  function showBrowse() { renderModes(); $("browse-what").innerHTML = `${esc(browse.label)}<small>${browse.i + 1} of ${browse.ids.length} — swipe, or use the arrows</small>`;
+    $("browse-prev").disabled = browse.i === 0; $("browse-next").disabled = browse.i === browse.ids.length - 1; show(browse.ids[browse.i]); decorateBrowseCard(); cardToTop(false); }
+  function decorateBrowseCard(dir) {
+    const card = document.querySelector("#result .label"); if (!card || !browse) return;
+    const top = card.querySelector(".block .top"); if (top && !top.querySelector(".pos")) { const p = document.createElement("span"); p.className = "pos"; p.textContent = `${browse.i + 1} of ${browse.ids.length}`; top.insertBefore(p, top.lastElementChild); }
+    if (!card.querySelector(".browsefoot")) { const f = document.createElement("div"); f.className = "row browsefoot";
+      f.innerHTML = `<button class="quiet" data-bgo="-1" ${browse.i === 0 ? "disabled" : ""}>◀ Previous</button><button class="quiet" data-bgo="1" ${browse.i === browse.ids.length - 1 ? "disabled" : ""}>Next ▶</button><button class="quiet" data-bdone="1">Done</button>`;
+      card.querySelector(".body").appendChild(f); f.querySelectorAll("[data-bgo]").forEach(b => b.onclick = () => browseGo(+b.dataset.bgo)); f.querySelector("[data-bdone]").onclick = () => $("browse-done").click(); }
+    if (dir) { card.classList.remove("from-right", "from-left"); void card.offsetWidth; card.classList.add(dir > 0 ? "from-right" : "from-left"); }
+  }
+  async function saveDirty() {                                       // the same two saves as the card's buttons, without the taps
+    if (!dirty || !currentId) return 0; const k = keepFields(); if (!k) return 0; const id = currentId, it = state.items[id], r = it ? it.row : {}; let n = 0;
+    const put = async (field, val, cur) => { if (val.trim() !== (cur || "").trim()) { await record(mkEvent(cfg.who, id, "EDIT", { field, value: val.trim() })); n++; } };
+    await put("unprinted_contents", k.uc, r.unprinted_contents); await put("unprinted_notes", k.un, [r.unprinted_notes, r.private_notes].filter(x => x && x.trim()).join("\n"));
+    await put("contents", k.lc, r.contents); await put("notes", k.ln, r.notes); dirty = false; return n; }
+  async function browseGo(d) { if (!browse) return; const j = browse.i + d; if (j < 0 || j >= browse.ids.length) return; const n = await saveDirty(); browse.i = j; store.set("lot26.browse", browse); setStatus(n ? "Saved what you typed on the last one." : "", n ? "ok" : ""); showBrowse(); decorateBrowseCard(d); }
+  $("browse-prev").onclick = () => browseGo(-1); $("browse-next").onclick = () => browseGo(1);
+  $("browse-done").onclick = async () => { const n = await saveDirty(); browse = null; store.set("lot26.browse", null); currentId = null; $("result").innerHTML = ""; renderModes(); setStatus(n ? "Saved what you typed. Finished browsing." : "Finished browsing.", "ok"); };
+  let swipe = null;                                                  // a sideways swipe on the card = next / previous (not when it starts in a text box: that is the caret)
+  $("result").addEventListener("touchstart", e => { const t = e.target.tagName; swipe = browse && !/TEXTAREA|INPUT|SELECT/.test(t) && e.touches.length === 1 ? { x: e.touches[0].clientX, y: e.touches[0].clientY, at: Date.now() } : null; }, { passive: true });
+  $("result").addEventListener("touchend", e => { if (!swipe) return; const c = e.changedTouches[0], dx = c.clientX - swipe.x, dy = c.clientY - swipe.y, quick = Date.now() - swipe.at < 700; swipe = null; if (quick && Math.abs(dx) > 70 && Math.abs(dy) < 50) browseGo(dx < 0 ? 1 : -1); }, { passive: true });
+
+  // ---- manual entry ----
+  function lookup(text) { const id = parseId(text); if (!id) { setStatus("Enter a number like 052, or F013 / E002.", "warn"); return; } $("manual").value = ""; if (run) { if (blocked) return; handleRunScan(id, true); } else show(id); }
+  $("btn-go").onclick = () => lookup($("manual").value);
+  $("manual").addEventListener("keydown", e => { if (e.key === "Enter") lookup($("manual").value); });
 
   // ---- camera scanning ----
-  let stream = null, scanning = false, lastHit = "", lastAt = 0;
+  // Reader: the phone's built-in barcode reader when the browser offers one (far better on small or slightly soft codes), jsQR otherwise.
+  // Camera: 1080p, continuous focus, and 2x zoom when the lens allows — so the label can be read from about a foot away, where phone cameras can still focus.
+  let stream = null, track = null, caps = {}, scanning = false, lastHit = "", lastAt = 0, wake = null, detector = null, detectorTried = false, detErr = 0, frames = 0, scanErr = "", cams = [];
+  const camPref = Object.assign({ deviceId: "", zoom: 2 }, store.get("lot26.cam") || {});
   const video = $("video"), canvas = document.createElement("canvas"), ctx = canvas.getContext("2d", { willReadFrequently: true });
-  $("btn-scan").onclick = async () => { if (scanning) stopScan(); else startScan(); };
+  $("btn-scan").onclick = () => { if (scanning || starting) stopScan(); else { $("run-setup").hidden = true; $("browse-setup").hidden = true; beepInit(); startScan(); } };
+  function setStatus(msg, kind) { const el = $("scan-status"); el.textContent = msg; el.className = "status " + (kind || ""); }
+  async function getDetector() {
+    if (detectorTried) return detector; detectorTried = true;
+    try { if ("BarcodeDetector" in window) { const f = await BarcodeDetector.getSupportedFormats(); if (f.includes("qr_code")) detector = new BarcodeDetector({ formats: ["qr_code"] }); } } catch (e) { detector = null; }
+    return detector;
+  }
+  async function openCamera() {
+    const size = { width: { ideal: 1920 }, height: { ideal: 1080 } }, any = Object.assign({ facingMode: { ideal: "environment" } }, size);
+    if (camPref.deviceId) { try { return await navigator.mediaDevices.getUserMedia({ video: Object.assign({ deviceId: { exact: camPref.deviceId } }, size), audio: false }); } catch (e) { camPref.deviceId = ""; store.set("lot26.cam", camPref); } }
+    return await navigator.mediaDevices.getUserMedia({ video: any, audio: false });
+  }
+  async function tune(set) { try { await track.applyConstraints({ advanced: [set] }); return true; } catch (e) { return false; } }
+  const zoomSteps = () => caps.zoom ? Array.from(new Set([1, 2, 3].map(z => Math.min(caps.zoom.max, Math.max(caps.zoom.min, z))))) : [];
+  let starting = false, cancelStart = false;     // a second tap while the camera is still opening must not open a second camera
   async function startScan() {
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { setStatus("The camera isn't available in this viewer. Open this page in Chrome or Safari, or type the number below.", "warn"); return; }
-    try {
-      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 960 } }, audio: false });
-    } catch (e) {
-      setStatus("Camera not available here (" + (e.name || "blocked") + "). Open this page in Chrome or Safari, or type the number below.", "warn"); return;
-    }
+    if (scanning || starting) return; starting = true; cancelStart = false;
+    try { await startScan_(); } finally { starting = false; }
+  }
+  async function startScan_() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { setStatus("The camera isn't available in this viewer. Open this page in Chrome, or type the number below.", "warn"); return; }
+    let s; try { s = await openCamera(); }
+    catch (e) { setStatus("Camera not available here (" + (e.name || "blocked") + "). Open this page in Chrome, or type the number below.", "warn"); return; }
+    if (cancelStart) { s.getTracks().forEach(t => t.stop()); return; } stream = s;
+    track = stream.getVideoTracks()[0]; caps = (track.getCapabilities && track.getCapabilities()) || {};
     video.srcObject = stream; await video.play();
-    $("scan").classList.add("on"); $("btn-scan").textContent = "Stop scanning"; scanning = true; setStatus("Point at a label. Hold steady on the QR.");
+    await getDetector();
+    if (!detector && typeof jsQR !== "function") { setStatus("The label reader did not load. Check the connection, reload the page, then try again.", "warn"); }
+    if (caps.focusMode && caps.focusMode.includes("continuous")) await tune({ focusMode: "continuous" });
+    if (caps.zoom) { const steps = zoomSteps(); camPref.zoom = steps.includes(camPref.zoom) ? camPref.zoom : steps[Math.min(1, steps.length - 1)]; await tune({ zoom: camPref.zoom }); }
+    try { const all = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === "videoinput"), back = all.filter(d => /back|rear|environment/i.test(d.label)); cams = back.length ? back : all; } catch (e) { cams = []; }
+    $("scan").classList.add("on"); scanning = true; frames = 0; scanErr = ""; renderRun(); renderCamTools();
+    if (detector || typeof jsQR === "function") setStatus(run ? "Hold the phone about a foot from each label in turn. Listen for the beep." : "Hold the phone about a foot from the label, QR inside the box.");
+    if (navigator.wakeLock) navigator.wakeLock.request("screen").then(w => { wake = w; }).catch(() => {});
     requestAnimationFrame(tick);
   }
   function stopScan() {
-    scanning = false; $("scan").classList.remove("on"); $("btn-scan").textContent = "Scan a label";
-    if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+    if (starting) cancelStart = true;
+    scanning = false; $("scan").classList.remove("on"); $("camtools").hidden = true; $("scan-diag").hidden = true;
+    if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; track = null; }
+    if (wake) { try { wake.release(); } catch (e) {} wake = null; } renderRun();
   }
-  function tick() {
-    if (!scanning) return;
-    if (video.readyState === video.HAVE_ENOUGH_DATA) {
-      const w = video.videoWidth, h = video.videoHeight;
-      if (w && h) {
-        const s = Math.min(1, 800 / w); canvas.width = Math.round(w*s); canvas.height = Math.round(h*s);
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const code = jsQR(img.data, img.width, img.height, { inversionAttempts: "dontInvert" });
-        if (code && code.data) {
-          const id = parseId(code.data), now = Date.now();
-          if (id && (id !== lastHit || now - lastAt > 2500)) { lastHit = id; lastAt = now; if (navigator.vibrate) navigator.vibrate(40); show(id); setStatus(`Read ${CLASSWORD[id[0]]} ${id.slice(1)}. Still scanning — point at the next label or tap Stop.`, "ok"); }
-        }
-      }
+  function renderCamTools() {
+    const cur = track && track.getSettings ? track.getSettings() : {};
+    $("camtools").hidden = !scanning; $("scan-diag").hidden = !scanning; if (!scanning) return;
+    $("cam-zoom").hidden = zoomSteps().length < 2; $("cam-zoom").textContent = `Zoom ${camPref.zoom}×`;
+    $("cam-light").hidden = !caps.torch; $("cam-light").classList.toggle("on", !!cur.torch);
+    const i = cams.findIndex(c => c.deviceId === cur.deviceId); $("cam-switch").hidden = cams.length < 2; $("cam-switch").textContent = `Switch camera (${i + 1} of ${cams.length})`;
+    $("scan-diag").textContent = `Reader: ${detector ? "built into this phone" : typeof jsQR === "function" ? "basic (this browser has no built-in one)" : "none loaded"} · camera ${video.videoWidth || "?"}×${video.videoHeight || "?"}${caps.zoom ? ` · zoom ${camPref.zoom}×` : " · no zoom control"} · ${frames} looks${scanErr ? " · last problem: " + scanErr : ""} · ${APP_VERSION}`;
+  }
+  $("cam-zoom").onclick = async () => { const st = zoomSteps(); camPref.zoom = st[(st.indexOf(camPref.zoom) + 1) % st.length]; store.set("lot26.cam", camPref); await tune({ zoom: camPref.zoom }); renderCamTools(); };
+  $("cam-light").onclick = async () => { const on = !(track.getSettings().torch); await tune({ torch: on }); renderCamTools(); };
+  $("cam-switch").onclick = async () => { const cur = track.getSettings().deviceId, i = cams.findIndex(c => c.deviceId === cur); camPref.deviceId = cams[(i + 1) % cams.length].deviceId; store.set("lot26.cam", camPref); stopScan(); await startScan(); };
+
+  async function readFrame() {
+    const w = video.videoWidth, h = video.videoHeight;
+    if (detector) {
+      try { const found = await detector.detect(video);
+        if (found && found.length) { const mid = c => { const b = c.boundingBox || { x: 0, y: 0, width: w, height: h }; return Math.hypot(b.x + b.width / 2 - w / 2, b.y + b.height / 2 - h / 2); };
+          return found.slice().sort((p, q) => mid(p) - mid(q))[0].rawValue || ""; } }     // several labels in view: take the one nearest the centre
+      catch (e) { if (++detErr > 8) detector = null; }
     }
-    setTimeout(() => requestAnimationFrame(tick), 120);
+    if (typeof jsQR !== "function") return "";
+    const cw = Math.round(w * 0.62), ch = Math.round(h * 0.62), s = Math.min(1, 1000 / cw);   // centre of the frame at (near) full sharpness, not the whole frame shrunk
+    canvas.width = Math.round(cw * s); canvas.height = Math.round(ch * s);
+    ctx.drawImage(video, (w - cw) / 2, (h - ch) / 2, cw, ch, 0, 0, canvas.width, canvas.height);
+    const img = ctx.getImageData(0, 0, canvas.width, canvas.height), code = jsQR(img.data, img.width, img.height, { inversionAttempts: "dontInvert" });
+    return (code && code.data) || "";
   }
-  function setStatus(msg, kind) { const el = $("scan-status"); el.textContent = msg; el.className = "status " + (kind || ""); }
-  document.addEventListener("visibilitychange", () => { if (document.hidden && scanning) stopScan(); });
+  async function tick() {
+    if (!scanning) return;
+    try {
+      if (!blocked && video.readyState >= 2 && video.videoWidth) {
+        frames++;
+        const id = parseId(await readFrame()), now = Date.now();
+        if (id && run) await handleRunScan(id);
+        else if (id) { lastHit = id; lastAt = now; if (navigator.vibrate) navigator.vibrate(40); stopScan(); show(id); cardToTop(true);
+          setStatus(`Read ${CLASSWORD[id[0]]} ${id.slice(1)}.`, "ok"); return; }
+      }
+    } catch (e) { scanErr = (e && e.message) || "unknown"; }                                  // one bad frame must never stop the scanner
+    if (frames % 8 === 0) renderCamTools();
+    setTimeout(() => requestAnimationFrame(tick), detector ? 90 : 130);
+  }
+
+  // ---- fallbacks when sync is not available ----
+  $("j-share").onclick = async () => {
+    const stamp = photoName("B000", new Date(), cfg.who).slice(5, -4), file = new File([eventsCsv(local.map(wire))], `lot26_events_${stamp}.csv`, { type: "text/csv" });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) { try { await navigator.share({ files: [file], title: "Lot 26 entries" }); } catch (e) {} }
+    else { const a = document.createElement("a"); a.href = URL.createObjectURL(file); a.download = file.name; a.click(); setStatus("Saved to this phone's Downloads as " + file.name, "ok"); }
+  };
+  $("j-copy").onclick = async () => { try { await navigator.clipboard.writeText(eventsCsv(local.map(wire))); setStatus("Copied.", "ok"); } catch (e) { setStatus("Copy was blocked here — use “Share as a file”.", "warn"); } };
+  $("j-photos").onclick = async () => { const recs = await idb.photos(ns()); if (!recs.length) { setStatus("No photos are waiting.", "ok"); return; }
+    for (const r of recs) { const a = document.createElement("a"); a.href = URL.createObjectURL(r.blob); a.download = r.name; a.click(); await new Promise(z => setTimeout(z, 400)); }
+    setStatus(`${recs.length} photo${recs.length === 1 ? "" : "s"} saved to this phone's Downloads, already named. They stay queued for upload too.`, "ok"); };
+
+  // ---- start ----
+  (async function boot() {
+    const hadLink = applySetupLink();
+    const okDb = await idb.open();
+    await loadNamespace();
+    if (!cfg.practice) { const old = store.get("lot26.sightings") || [], have = new Set(local.map(e => e.event_id)); let added = 0;
+      for (const s of old) { const ev = fromV1Sighting(s); if (s.id && s.checkpoint && !have.has(ev.event_id)) { ev.synced = false; local.push(ev); added++; } } if (added) await persistLocal(); }
+    fillSettings(); recompute();
+    if (!okDb) setStatus("This browser won't keep data between visits (private window?). Use normal Chrome.", "warn");
+    else if (hadLink) { $("d-settings").open = true; setStatus("Sync is set up on this phone. Enter your name below, then tap “Save and test”.", "ok"); }
+    else if (!cfg.who) setStatus("Tip: enter your name under “Settings and sync”, so records show who made them.");
+    if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+    if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").then(() => navigator.serviceWorker.ready).then(r => r.active && r.active.postMessage({ keep: location.pathname })).catch(() => {});
+    syncSoon(300);
+  })();
 })();
 </script>
 </body>
