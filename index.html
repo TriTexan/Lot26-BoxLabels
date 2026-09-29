@@ -150,6 +150,8 @@
   #pick .pick-note { margin-top: 12px; padding: 10px 12px; border-radius: 10px; background: #fff4d6; color: #6b4e00; font-size: 15px; } #pick .pick-note.bad { background: #fde3e3; color: #8a1020; }
   #pick button { width: 100%; margin-top: 12px; font-size: 18px; padding: 15px; } #pick .chips button { width: auto; margin-top: 0; font-size: 16px; padding: 10px 14px; }
   #pick #pick-yes { background: #111; color: #fff; } #pick #pick-no { background: #f3f3f3; color: #111; border: 1px solid #ccc; }
+  p .warn, .counts .warn { color: var(--warn); }
+  #where [data-brs], #where [data-brw], #where [data-brc] { cursor: pointer; } #where span[data-brs], #where span[data-brw] > b, #where span[data-brc] { text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 3px; }
   .sub.warn { color: var(--warn); }
 </style>
 </head>
@@ -175,7 +177,7 @@
   <div class="pick-box">
     <div class="alarm-id" id="pick-id"></div>
     <div class="pick-head">Which container is it going into?</div>
-    <div class="elabel" id="pick-known-label" hidden>Already being loaded — tap to pick</div>
+    <div class="elabel" id="pick-known-label" hidden>Still being loaded — tap to pick</div>
     <div class="chips" id="pick-known"></div>
     <label class="field"><span id="pick-container-label">Type a name (POD1, TRUCK …); a new name starts a new container</span><input id="pick-container" type="text" placeholder="type a name for it" autocomplete="off" autocapitalize="characters" enterkeyhint="done"></label>
     <label class="field">Wave it is loaded in<select id="pick-wave"></select></label>
@@ -213,10 +215,13 @@
   <div id="browsebar" hidden><button id="browse-prev" aria-label="Previous">◀</button><div class="what" id="browse-what"></div><button id="browse-next" aria-label="Next">▶</button><button id="browse-done">Done</button></div>
 
   <div id="browse-setup" class="panel" hidden>
-    <p class="ptitle">Go through the boxes for one area</p>
+    <p class="ptitle">Find and go through boxes — leave every filter open for the whole list</p>
     <label class="field">Stage area (where it is dropped first)<select id="br-stage"></select></label>
     <label class="field">Final location<select id="br-final"></select></label>
     <label class="field">Planned wave<select id="br-wave"></select></label>
+    <label class="field">State<select id="br-state"></select></label>
+    <label class="field">Container it was loaded into<select id="br-container"></select></label>
+    <label class="field">Words on the card — contents, notes, what's inside, set, room<input id="br-text" type="search" placeholder="e.g. china, pantry, bags" autocomplete="off"></label>
     <p class="note" id="br-count"></p>
     <div class="row" style="margin-top:8px"><button id="br-start" disabled>Start with the first</button><button id="br-cancel" class="quiet">Cancel</button></div>
     <div id="br-list" style="margin-top:10px"></div>
@@ -231,7 +236,7 @@
       <button class="quiet" data-type="PLACED">Putting in rooms</button>
     </div>
     <div id="run-load-fields" hidden>
-      <div class="elabel" id="run-known-label" hidden style="font-size:14px;color:var(--muted);margin-top:10px">Already in use — tap to pick</div>
+      <div class="elabel" id="run-known-label" hidden style="font-size:14px;color:var(--muted);margin-top:10px">Still being loaded — tap to pick</div>
       <div class="chips" id="run-known"></div>
       <label class="field">Container it's going into — required. Tap one above, or type a new name (POD1, TRUCK …); a new name starts a new container<input id="run-container" type="text" list="containers" placeholder="type a name for it" autocomplete="off" autocapitalize="characters"></label>
       <datalist id="containers"></datalist>
@@ -374,7 +379,7 @@
     const undone = new Set(events.filter(e => e.type === "UNDO").map(e => e.value));
     const items = {}, containers = {}, names = {};
     const get = id => items[id] || (items[id] = { id, base: null, edits: {}, history: [], photos: [], unknown: true });
-    const box = name => containers[name] || (containers[name] = { name, events: [], wave: "", loaded: 0, checkedIn: 0 });
+    const box = name => containers[name] || (containers[name] = { name, events: [], wave: "", loaded: 0, checkedIn: 0, loadedWeight: 0, loadedNoWeight: 0 });
     for (const r of (rows || [])) { const id = (r.id || "").trim().toUpperCase(); if (id) { const it = get(id); it.base = r; it.unknown = false; } }
     for (const e of events) {
       if (e.type === "UNDO" && !e.id && e.container) { box(e.container).undoTs = e.ts; continue; }   // an undo of a container mark: one step back, and no second step until a new mark is made
@@ -400,9 +405,10 @@
       const pw = ((it.edits.wave != null ? it.edits.wave : ((it.base || {}).wave || "")) || "").trim().toUpperCase(); it.plannedWave = WAVES.includes(pw) ? pw : "";
       it.row.wave = (it.loaded && it.loaded.wave) || it.plannedWave;
       it.w1 = it.plannedWave === "W1" && W1_WORDS[(it.row.w1 || "").trim().toUpperCase()] ? (it.row.w1 || "").trim().toUpperCase() : "";
+      it.weight = weightOf(it.row.weight_lb);                                            // pounds, for the mover's limits; kept off the label
       // Where is a loaded item? Only a container event made AFTER this item went in counts for it (a container name can be reused for a later trip).
       const c = it.loaded && it.container ? box(it.container) : null;
-      if (c) { c.loaded++; if (it.loaded.wave) c.wave = it.loaded.wave; else if (!c.wave && it.plannedWave) c.wave = it.plannedWave;   // a load made without a session wave: the plan stands in
+      if (c) { c.loaded++; c.loadedWeight += it.weight || 0; if (it.weight == null) c.loadedNoWeight++; if (it.loaded.wave) c.wave = it.loaded.wave; else if (!c.wave && it.plannedWave) c.wave = it.plannedWave;   // a load made without a session wave: the plan stands in
         if (it.arrived) { c.checkedIn++; const first = cps.find(e => (e.type === "RECEIVED" || e.type === "PLACED") && e.ts > it.loaded.ts);
           const wasAway = first && c.events.some(e => e.type === "DEPARTED" && e.ts > it.loaded.ts && e.ts < first.ts);   // only a container that was on its way can evidently have been delivered
           if (first && wasAway && (!c.evidentTs || first.ts < c.evidentTs)) { c.evidentTs = first.ts; c.evidentWho = first.who || ""; }
@@ -434,11 +440,14 @@
       counts,
       onboard: transit.filter(i => i.phase === "ONBOARD"), onTheWay: transit.filter(i => i.phase === "TRANSIT"), delivered: transit.filter(i => i.phase === "DELIVERED"),
       containers: Object.values(state.containers || {}).filter(c => c.loaded || c.events.length).sort((a, b) => (a.name < b.name ? -1 : 1))
-        .map(c => Object.assign(c, { notAboard: c.wave ? all.filter(i => !i.unknown && !i.loaded && !i.received && i.plannedWave === c.wave) : [] })),
+        .map(c => { const na = c.wave ? all.filter(i => !i.unknown && !i.loaded && !i.received && i.plannedWave === c.wave) : [], sw = sumWeights(na);
+          // assigned = aboard here + planned for this container's wave and not yet loaded anywhere (the same items the not-aboard list shows)
+          return Object.assign(c, { notAboard: na, assignedCount: c.loaded + na.length, assignedWeight: c.loadedWeight + sw.lb, assignedNoWeight: c.loadedNoWeight + sw.none }); }),
       packing: all.filter(i => i.last && i.last.type === "STARTED"), readyToSeal: all.filter(i => i.last && i.last.type === "READY"), sealed: all.filter(i => isSealed(i)),
       // waveOf: the wave it was loaded in once it has been, otherwise the plan. An item that arrived without a loading scan keeps its planned wave.
       plan: WAVES.concat([""]).map(w => { const inW = all.filter(i => !i.unknown && waveOf(i) === w), n = k => inW.filter(i => stateOf(i) === k).length;
-        return { wave: w, total: inW.length, notLoaded: n("NOTLOADED"), onboard: n("ONBOARD"), transit: n("TRANSIT"), delivered: n("DELIVERED"), arrived: n("IN") }; }),
+        const sw = sumWeights(inW);
+        return { wave: w, total: inW.length, notLoaded: n("NOTLOADED"), onboard: n("ONBOARD"), transit: n("TRANSIT"), delivered: n("DELIVERED"), arrived: n("IN"), weight: sw.lb, noWeight: sw.none }; }),
       mustNotLoaded: all.filter(i => i.w1 === "MUST" && !i.loaded && !i.received),     // arrived means it got there, loading scan or not
       canGo: all.filter(i => i.w1 === "OK" && !i.loaded && !i.received),
       inTransit: transit, byContainer
@@ -462,8 +471,13 @@
   // Before step 2 a change is a minor correction; from step 2 on, any action that would put the item at an EARLIER step is questioned first.
   const JOURNEY = { STARTED: 0, READY: 0, SEALED: 0, PACKED: 0, LOADED: 1, RECEIVED: 4, PLACED: 5 };
   const journeyOf = item => !item || !item.loaded && !item.received ? 0 : item.last && item.last.type === "PLACED" ? 5 : item.received ? 4 : item.phase === "DELIVERED" ? 3 : item.phase === "TRANSIT" ? 2 : 1;
-  const JOURNEY_WORDS = ["packing", "aboard", "on the way", "delivered, not unloaded", "arrived", "in its room"];
-  const verbFor = name => (/TRUCK|VAN|TRAILER|LORRY/i.test(name || "") ? "departed" : "picked up");   // pods are picked up; trucks depart
+  const JOURNEY_WORDS = ["packing", "aboard", "en route to CA", "at CA home, not unloaded", "arrived", "in its room"];
+  const isTruck = name => /TRUCK|VAN|TRAILER|LORRY/i.test(name || "");
+  const verbFor = name => (isTruck(name) ? "departed" : "picked up");   // pods are picked up; trucks depart
+  const finalWord = name => (isTruck(name) ? "departed CA home" : "returned to shipper");   // the last mark: a pod goes back to the shipper, a truck just leaves
+  const WEIGHT_RE = /^\d{1,4}(\.\d{1,2})?$/;                                       // pounds, up to 9999.99; anything else is "no weight", never a guess
+  const weightOf = v => { const s = String(v == null ? "" : v).trim(); return WEIGHT_RE.test(s) ? +s : null; };
+  const sumWeights = items => items.reduce((a, i) => ({ lb: a.lb + (i.weight || 0), none: a.none + (i.weight == null ? 1 : 0) }), { lb: 0, none: 0 });
   const CONTAINER_RE = /^[A-Z0-9][A-Z0-9 _-]{0,29}$/;   // the same rule the Drive script applies to a pod or truck name when it is marked; checked at loading so no container can be named in a way the script will later refuse
   function runVerdict(item, run, now, cts, confirmed) {
     if (run.type === "SEALED") {
@@ -525,7 +539,7 @@
     field: "", value: "", container: s.container || "", wave: "", location: s.location || "", photo: s.photo || "", note: s.note || "" });
 
   // ---- storage: small things in localStorage (shared with v1), events and photos in IndexedDB ----
-  const APP_VERSION = "Box app 3.10 (2026-09-24)";
+  const APP_VERSION = "Box app 3.13 (2026-09-28)";
   const $ = id => document.getElementById(id);
   const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const store = { get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } },
@@ -641,20 +655,20 @@
   function renderWhere() {
     const c = lists.counts, el = $("where");
     el.innerHTML = `<div class="counts">
-        <span>Items in the inventory</span><b>${c.total}</b>
-        <span>Not started</span><b>${c.none}</b>
-        <span>Packing in progress</span><b>${lists.packing.length}</b>
-        <span>Full — ready to seal</span><b>${lists.readyToSeal.length}</b>
-        <span>Sealed, waiting for moving day</span><b>${lists.sealed.length}</b>
-        <span>Loaded, container not picked up yet</span><b>${lists.onboard.length}</b>
-        <span>On the way</span><b>${lists.onTheWay.length}</b>
-        <span>Delivered, not unloaded yet</span><b>${lists.delivered.length}</b>
-        <span>Arrived</span><b>${c.RECEIVED}</b><span>In their rooms</span><b>${c.PLACED}</b>
-        <span>With at least one photo</span><b>${c.photos}</b>
+        <span data-brs="">Items in the inventory</span><b data-brs="">${c.total}</b>
+        <span data-brs="none">Not started</span><b data-brs="none">${c.none}</b>
+        <span data-brs="STARTED">Packing in progress</span><b data-brs="STARTED">${lists.packing.length}</b>
+        <span data-brs="READY">Full — ready to seal</span><b data-brs="READY">${lists.readyToSeal.length}</b>
+        <span data-brs="SEALED">Sealed, waiting for moving day</span><b data-brs="SEALED">${lists.sealed.length}</b>
+        <span data-brs="ONBOARD">Loaded, still at TX</span><b data-brs="ONBOARD">${lists.onboard.length}</b>
+        <span data-brs="TRANSIT">En route to CA</span><b data-brs="TRANSIT">${lists.onTheWay.length}</b>
+        <span data-brs="DELIVERED">At CA home, not unloaded</span><b data-brs="DELIVERED">${lists.delivered.length}</b>
+        <span data-brs="RECEIVED">Arrived</span><b data-brs="RECEIVED">${c.RECEIVED}</b><span data-brs="PLACED">In their rooms</span><b data-brs="PLACED">${c.PLACED}</b>
+        <span data-brs="photo">With at least one photo</span><b data-brs="photo">${c.photos}</b>
         ${c.unknown ? `<span>Scanned, but not in the inventory</span><b>${c.unknown}</b>` : ""}
       </div>
-      <div class="daylist"><h2>Plan by wave</h2>${lists.plan.map(x => `<div class="counts" style="margin:4px 0 8px"><span><b style="text-align:left">${esc(x.wave ? waveFull(x.wave, state.names) : "No wave planned yet")}</b></span><b>${x.total}</b>
-        ${x.total ? `<span class="note" style="grid-column:1 / -1;margin:0">${[["notLoaded", "not loaded yet"], ["onboard", "loaded, waiting for pick-up"], ["transit", "on the way"], ["delivered", "delivered, not unloaded"], ["arrived", "arrived"]].filter(([k]) => x[k]).map(([k, w]) => `${x[k]} ${w}`).join(" · ")}</span>` : ""}</div>`).join("")}</div>
+      <div class="daylist"><h2>Plan by wave</h2>${lists.plan.map(x => `<div class="counts" style="margin:4px 0 8px"><span data-brw="${x.wave}"><b style="text-align:left">${esc(x.wave ? waveFull(x.wave, state.names) : "No wave planned yet")}</b></span><b data-brw="${x.wave}">${x.total}</b>
+        ${x.total ? `<span class="note" style="grid-column:1 / -1;margin:0">${[["notLoaded", "not loaded yet"], ["onboard", "loaded, still at TX"], ["transit", "en route to CA"], ["delivered", "at CA home, not unloaded"], ["arrived", "arrived"]].filter(([k]) => x[k]).map(([k, w]) => `${x[k]} ${w}`).join(" · ")} · ${fmtLb(x.weight)}${x.noWeight ? ` <span class="warn">(${x.noWeight} without a weight)</span>` : ""}</span>` : ""}</div>`).join("")}</div>
       ${lists.readyToSeal.length ? `<div class="daylist" id="ready-list"><h2>Ready to seal (${lists.readyToSeal.length})</h2>${readyButtons(lists.readyToSeal)}</div>` : ""}
       ${lists.packing.length ? `<div class="daylist"><h2>Packing in progress (${lists.packing.length})</h2>${idButtons(lists.packing)}</div>` : ""}
       ${lists.containers.length ? `<div class="daylist"><h2>Pods and trucks</h2>${lists.containers.map(containerCard).join("")}</div>` : ""}
@@ -666,20 +680,25 @@
     el.querySelectorAll("[data-cundo]").forEach(b => b.onclick = () => undoContainer(b.dataset.c));
   }
   // One entry for the whole pod or truck. The item-by-item scans stay the audit record; this only says where the container is.
-  const containerWords = { DEPARTED: "on the way", DELIVERED: "delivered", RETURNED: "returned to shipper" };
-  const markWord = (name, type) => (type === "DELIVERED" ? "delivered" : type === "RETURNED" ? "returned to shipper" : verbFor(name));
+  // Where a container is, in four states: At Texas home → En route to CA → At CA home → Returned to shipper (a pod) / Departed CA home (a truck).
+  const stateWord = (name, type) => (!type ? "At Texas home" : type === "DEPARTED" ? "En route to CA" : type === "DELIVERED" ? "At CA home" : isTruck(name) ? "Departed CA home" : "Returned to shipper");
+  const containerWords = { DEPARTED: "en route to CA", DELIVERED: "at CA home", RETURNED: "returned to shipper" };
+  const markWord = (name, type) => (type === "DELIVERED" ? "delivered" : type === "RETURNED" ? finalWord(name) : verbFor(name));
+  const fmtLb = n => (Number.isInteger(n) ? n.toLocaleString("en-US") : n.toLocaleString("en-US", { minimumFractionDigits: 1, maximumFractionDigits: 2 })) + " lb";
+  const weightLine = (lb, count, none) => `${fmtLb(lb)} · ${count} item${count === 1 ? "" : "s"}${none ? ` · <span class="warn">${none} without a weight</span>` : ""}`;
   function containerCard(c) {
     const evident = !!(c.evidentTs && c.last && c.last.type === "DEPARTED");     // "evidently delivered" only while it is still marked as on the way
-    const st = evident ? `evidently delivered — ${c.checkedIn} box${c.checkedIn === 1 ? "" : "es"} from it checked in at the other end since ${whenText(c.evidentTs)}${c.evidentWho ? " (" + esc(c.evidentWho) + ")" : ""}; not marked`
-      : c.last ? `${c.last.type === "DEPARTED" ? verbFor(c.name) + " — on the way" : c.last.type === "DELIVERED" ? "delivered" : "returned to shipper — finished"} since ${whenText(c.last.ts)}${c.last.who ? " (" + esc(c.last.who) + ")" : ""}` : `still here — not marked ${verbFor(c.name)} yet`;
-    const next = evident ? ["DELIVERED", `Mark ${esc(c.name)} as delivered`] : !c.last ? ["DEPARTED", `Mark ${esc(c.name)} as ${verbFor(c.name)}`] : c.last.type === "DEPARTED" ? ["DELIVERED", `Mark ${esc(c.name)} as delivered`] : c.last.type === "DELIVERED" ? ["RETURNED", `Mark ${esc(c.name)} as returned to shipper`] : null;
+    const st = evident ? `<b>At CA home</b>, evidently — ${c.checkedIn} box${c.checkedIn === 1 ? "" : "es"} from it checked in since ${whenText(c.evidentTs)}${c.evidentWho ? " (" + esc(c.evidentWho) + ")" : ""}; not marked`
+      : c.last ? `<b>${stateWord(c.name, c.last.type)}</b> since ${whenText(c.last.ts)}${c.last.who ? " (" + esc(c.last.who) + ")" : ""}` : `<b>${stateWord(c.name, "")}</b>`;
+    const next = evident ? ["DELIVERED", `${esc(c.name)} delivered — at CA home`] : !c.last ? ["DEPARTED", `${esc(c.name)} ${verbFor(c.name)} — en route to CA`] : c.last.type === "DEPARTED" ? ["DELIVERED", `${esc(c.name)} delivered — at CA home`] : c.last.type === "DELIVERED" ? ["RETURNED", `${esc(c.name)} ${finalWord(c.name)} — done`] : null;
     const aboard = c.loaded - c.checkedIn, na = c.notAboard || [];
     return `<div class="panel" style="margin-top:8px"><p class="ptitle">${esc(c.name)}${c.wave ? " · " + esc(waveFull(c.wave, state.names)) : ""}</p>
-      <p style="margin:0 0 4px;font-size:17px"><b>Status:</b> ${st}</p>
-      <p class="note" style="margin:0 0 6px;font-size:15px">${c.loaded} loaded · ${aboard} still aboard · ${c.checkedIn} checked in at the other end</p>
+      <p style="margin:0 0 4px;font-size:17px">Status: ${st}</p>
+      <p style="margin:0 0 4px;font-size:15px;line-height:1.35">${!c.last ? `<b>Assigned</b> ${weightLine(c.assignedWeight, c.assignedCount, c.assignedNoWeight)}<br>` : ""}<b>Loaded</b> ${weightLine(c.loadedWeight, c.loaded, c.loadedNoWeight)}</p>
+      <p class="note" style="margin:0 0 6px;font-size:15px"><span data-brc="${esc(c.name)}">${c.loaded} loaded</span> · ${aboard} aboard · ${c.checkedIn} checked in</p>
       ${c.returned && aboard ? `<p class="note warn" style="margin:0 0 6px">${aboard} box${aboard === 1 ? "" : "es"} loaded into ${esc(c.name)} ${aboard === 1 ? "was" : "were"} never checked in and the container has gone back — ${aboard === 1 ? "it is" : "they are"} missing unless ${aboard === 1 ? "it" : "they"} came out without a scan. See "Loaded, not checked in".</p>` : ""}
       ${c.outOfTurn ? `<p class="note warn" style="margin:0 0 6px">${c.outOfTurn} box${c.outOfTurn === 1 ? " was" : "es were"} checked in at the other end although ${esc(c.name)} was never marked ${verbFor(c.name)} — someone confirmed it out of turn; check the records.</p>` : ""}
-      ${!c.last && c.wave ? (na.length ? `<details style="margin:0 0 8px"><summary class="note warn" style="cursor:pointer">Planned for ${esc(waveShort(c.wave))} but not aboard: ${na.length} — check before it leaves</summary>${idButtons(na)}</details>` : `<p class="note" style="margin:0 0 8px;color:var(--ok)">Everything planned for ${esc(waveShort(c.wave))} is aboard.</p>`) : ""}
+      ${!c.last && c.wave ? (na.length ? `<details style="margin:0 0 8px"><summary class="note warn" style="cursor:pointer">Not aboard yet: ${na.length} of ${esc(waveShort(c.wave))} — check before it leaves</summary>${idButtons(na)}</details>` : `<p class="note" style="margin:0 0 8px;color:var(--ok)">Everything planned for ${esc(waveShort(c.wave))} is aboard.</p>`) : ""}
 
       <div class="row">${next ? `<button data-c="${esc(c.name)}" data-cmark="${next[0]}">${next[1]}</button>` : ""}${c.last && !c.undoLocked ? `<button class="quiet" data-c="${esc(c.name)}" data-cundo="1">Undo “${markWord(c.name, c.last.type)}”</button>` : ""}</div>${c.undoLocked ? `<p class="note" style="margin:8px 0 0">Undone once. A correction goes back one step only; for anything bigger, ask the design chat.</p>` : ""}</div>`;
   }
@@ -688,9 +707,9 @@
     if (serverOlderThan(1, type === "RETURNED" ? 6 : 1) && scriptNeedsUpdate(type === "RETURNED" ? "1.6" : "1.1")) return;
     const n = c.loaded - c.checkedIn;
     const na = (c.notAboard || []).length;
-    if (type === "RETURNED" && !confirm(`Mark ${name} as returned to the shipper?\n\nThis ends its use.${n ? `\n${n} box${n === 1 ? " is" : "es are"} still recorded aboard and never checked in — ${n === 1 ? "it" : "they"} will be listed as missing.` : " Everything loaded into it has been checked in."}`)) return;
-    if (type !== "RETURNED" && !confirm(type === "DEPARTED" ? `Mark ${name} as ${verbFor(name)} and on its way?\n\n${n} item${n === 1 ? " is" : "s are"} aboard.${na ? `\n${na} box${na === 1 ? "" : "es"} planned for ${waveShort(c.wave)} ${na === 1 ? "is" : "are"} NOT aboard and will stay behind — check the list on the card first.` : ""}` : `Mark ${name} as delivered?\n\n${n} item${n === 1 ? "" : "s"} still to unload and check in.`)) return;
-    await record(mkEvent(cfg.who, "", type, { container: name, wave: c.wave || "" })); setStatus(`${name}: ${type === "DEPARTED" ? verbFor(name) + " — on the way" : type === "DELIVERED" ? "delivered" : "returned to shipper"}.`, "ok");
+    if (type === "RETURNED" && !confirm(`${name}: ${finalWord(name)}?\n\nThis ends its use.${n ? `\n${n} box${n === 1 ? " is" : "es are"} still recorded aboard and never checked in — ${n === 1 ? "it" : "they"} will be listed as missing.` : " Everything loaded into it has been checked in."}`)) return;
+    if (type !== "RETURNED" && !confirm(type === "DEPARTED" ? `${name}: ${verbFor(name)}, en route to CA?\n\n${n} item${n === 1 ? " is" : "s are"} aboard, ${fmtLb(c.loadedWeight)}${c.loadedNoWeight ? ` (${c.loadedNoWeight} without a weight)` : ""}.${na ? `\n${na} box${na === 1 ? "" : "es"} planned for ${waveShort(c.wave)} ${na === 1 ? "is" : "are"} NOT aboard and will stay behind — check the list on the card first.` : ""}` : `${name}: delivered, at CA home?\n\n${n} item${n === 1 ? "" : "s"} still to unload and check in.`)) return;
+    await record(mkEvent(cfg.who, "", type, { container: name, wave: c.wave || "" })); setStatus(`${name}: ${stateWord(name, type)}.`, "ok");
   }
   async function undoContainer(name) {
     const c = state.containers[name]; if (!c || !c.last || c.undoLocked || !confirm(`Undo “${markWord(name, c.last.type)}” for ${name}?\n\nThis goes back one step; a second undo is not offered.`)) return;
@@ -856,7 +875,7 @@
   }
   const whenText = ts => { const d = new Date(ts); return isNaN(d) ? ts : d.toLocaleString([], { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }); };
   const cpWords = { STARTED: "Packing started", READY: "Full — ready to seal", SEALED: "Sealed, 5 labels on", PACKED: "Packed (older entry)", LOADED: "Loaded", RECEIVED: "Arrived", PLACED: "Placed in room", SEEN: "Seen" };
-  const phaseWords = { ONBOARD: "loaded, not picked up yet", TRANSIT: "on the way", DELIVERED: "delivered, not unloaded yet" };
+  const phaseWords = { ONBOARD: "loaded, still at TX", TRANSIT: "en route to CA", DELIVERED: "at CA home, not unloaded" };
 
   function show(id, keep) {
     currentId = id; dirty = !!keep;
@@ -873,7 +892,7 @@
     const hand = [r.contents, r.notes].filter(x => x && x.trim()).join("\n");
     const had = (k, v) => (keep && keep[k] != null ? keep[k] : v);
     const uc = had("uc", r.unprinted_contents || ""), un = had("un", [r.unprinted_notes, r.private_notes].filter(x => x && x.trim()).join("\n"));
-    const pw = it ? it.plannedWave : "";
+    const pw = it ? it.plannedWave : "", wt = had("wt", it && it.weight != null ? String(it.weight) : "");
     const lc = had("lc", r.contents || ""), ln = had("ln", r.notes || ""), labelChanged = !!(it && (it.edits.contents !== undefined || it.edits.notes !== undefined));
     const hist = it ? it.history : [], nPhotos = it ? it.photos.length : 0, w1 = it ? it.w1 : "";
     out.innerHTML = `
@@ -894,6 +913,7 @@
             ${!(base.dest || "").trim() ? `<label class="field">Final location written on this label<select id="ed-dest"><option value="">— choose —</option>${DEST_CHOICES.map(d => `<option value="${d}" ${d === dest ? "selected" : ""}>${esc(disp(d))}</option>`).join("")}</select></label>` : ""}
             <label class="field">What's inside — kept off the label<textarea id="ed-uc" rows="3">${esc(uc)}</textarea></label>
             <label class="field">Notes — kept off the label<textarea id="ed-un" rows="2">${esc(un)}</textarea></label>
+            <label class="field">Weight, lb — for the mover's limits; kept off the label<input id="ed-wt" type="number" inputmode="decimal" min="0" max="9999" step="0.5" placeholder="not weighed yet" value="${esc(wt)}"></label>
             <div class="row" style="margin-top:10px"><button class="save" id="ed-save">Save details</button><button class="quiet" id="ed-photo">Take a photo</button></div>
             <div class="thumbs">${(it ? it.photos : []).map((ph, i) => `<button class="ptile" data-ph="${i}" aria-label="Open photo ${i + 1}">${thumbURL[ph.name] ? `<img src="${thumbURL[ph.name]}" alt="">` : `<span>Photo ${i + 1}<small>tap to open</small></span>`}</button>`).join("")}</div>
             <div class="pcount">${nPhotos ? `${nPhotos} photo${nPhotos === 1 ? "" : "s"} recorded for this one` : "No photos yet"}</div>
@@ -915,7 +935,7 @@
       </div>`;
     if (browse && browse.ids[browse.i] === id) setTimeout(() => decorateBrowseCard(), 0);
     const keepNow = keepFields;
-    ["ed-uc", "ed-un", "ed-lc", "ed-ln"].forEach(k => $(k).oninput = () => { dirty = true; });
+    ["ed-uc", "ed-un", "ed-wt", "ed-lc", "ed-ln"].forEach(k => $(k).oninput = () => { dirty = true; });
     $("ed-lsave").onclick = async () => {
       const k = keepFields(); let n = 0;
       if (k.lc.trim() !== (r.contents || "").trim()) { await record(mkEvent(cfg.who, id, "EDIT", { field: "contents", value: k.lc.trim() })); n++; }
@@ -930,6 +950,7 @@
       const k = keepNow(); let n = 0;
       if (k.uc.trim() !== (r.unprinted_contents || "").trim()) { await record(mkEvent(cfg.who, id, "EDIT", { field: "unprinted_contents", value: k.uc.trim() })); n++; }
       if (k.un.trim() !== [r.unprinted_notes, r.private_notes].filter(x => x && x.trim()).join("\n").trim()) { await record(mkEvent(cfg.who, id, "EDIT", { field: "unprinted_notes", value: k.un.trim() })); n++; }
+      const w = await saveWeight(id, it, k.wt); if (w === false) { show(id, k); return; } n += w;
       show(id, k.open ? { lc: k.lc, ln: k.ln, open: true } : null); setStatus(n ? "Details saved." : "Nothing had changed.", "ok");
     };
     $("ed-photo").onclick = () => { photoFor = id; $("cam").click(); };
@@ -940,9 +961,19 @@
       const k = keepNow(), d = dirty; await record(mkEvent(cfg.who, id, "UNDO", { value: last.event_id })); show(id, d ? k : null); setStatus("Undone.", "ok"); };
   }
 
-  const missingBeforeSeal = it => [(!it || !it.photos.length) ? "no photo of the contents" : "", (!it || !(it.row.unprinted_contents || it.row.contents || "").trim()) ? "no description of what's inside" : ""].filter(Boolean);
+  const described = r => !!(r && [r.unprinted_contents, r.contents, r.unprinted_notes, r.notes, r.private_notes].some(x => x && String(x).trim()));   // printed or not, contents or a note
+  const missingBeforeSeal = it => [(!it || !it.photos.length) ? "no photo of the contents" : "", !(it && described(it.row)) ? "no description of what's inside" : ""].filter(Boolean);
   function keepFields() { if (!$("ed-uc")) return null; const lt = document.querySelector("#result .labeltext");
-    return { uc: $("ed-uc").value, un: $("ed-un").value, lc: $("ed-lc").value, ln: $("ed-ln").value, open: !!(lt && lt.open) }; }
+    return { uc: $("ed-uc").value, un: $("ed-un").value, wt: $("ed-wt").value, lc: $("ed-lc").value, ln: $("ed-ln").value, open: !!(lt && lt.open) }; }
+  // The weight: pounds for the mover's limits, up to 9999.99, blank = not weighed. Needs Drive script 1.7 (an older script would reject the field).
+  // Returns 1 (saved), 0 (unchanged), false (refused — the typed value stays on the card so it can be fixed).
+  async function saveWeight(id, it, typed) {
+    const v = String(typed == null ? "" : typed).trim(), cur = it && it.weight != null ? String(it.weight) : "";
+    if (v === cur || (v && cur && +v === +cur)) return 0;
+    if (v && !/^\d{1,4}(\.\d{1,2})?$/.test(v)) { setStatus("The weight is pounds as a number, up to 9999 — for example 42 or 42.5. Not saved.", "warn"); return false; }
+    if (serverOlderThan(1, 7)) { scriptNeedsUpdate("1.7"); return false; }
+    await record(mkEvent(cfg.who, id, "EDIT", { field: "weight_lb", value: v })); return 1;
+  }
   async function logCheckpoint(id, cp, keep) {
     const it = state.items[id], extra = {}, name = `${CLASSWORD[id[0]]} ${id.slice(1)}`;
     if (it && it.last && (it.last.type === cp || (cp === "SEALED" && it.last.type === "PACKED"))) { setStatus(`${name} was already marked “${cpWords[cp]}” ${agoText(it.last.ts)}${it.last.who ? " by " + it.last.who : ""}. Nothing added.`, "ok"); return; }
@@ -955,8 +986,11 @@
     else if ((cp === "RECEIVED" || cp === "PLACED") && cur === 1 && it.container) {           // arriving from a container that never left: the same question the scan session asks
       if (!confirm(`${it.container} was never marked ${verbFor(it.container)}, and ${name} is still recorded as aboard.\n\nRecord “${cpWords[cp]}” anyway?`)) return;
       extra.note = `out of turn: ${it.container} not marked ${verbFor(it.container)}`; }
-    if (cp === "READY" || cp === "SEALED") { const miss = missingBeforeSeal(it);
-      if (miss.length && !confirm(`${name}: ${miss.join(" and ")} yet.\n\n${cp === "SEALED" ? "Once it is taped, adding them means opening it again. Mark it sealed anyway?" : "Mark it ready to seal anyway?"}`)) return; }
+    let savedFirst = 0;
+    if (cp === "READY" || cp === "SEALED") {
+      if (currentId === id) savedFirst = await saveDirty();                                 // what is typed on the card is recorded first — it counts, and it must not be lost behind a question
+      const miss = missingBeforeSeal(state.items[id]);
+      if (miss.length && !confirm(`${name}: ${miss.join(" and ")} yet.\n\n${cp === "SEALED" ? "Once it is taped, adding them means opening it again. Mark it sealed anyway?" : "Mark it ready to seal anyway?"}`)) { if (savedFirst) setStatus("Saved what you typed. Not marked.", "ok"); return; } }
     if (cp === "LOADED") {                                                                  // the same choice a loading session offers: a container still being loaded, or a new name
       const pk = await pickContainer(id, it);
       if (!pk) { setStatus(`${name}: nothing recorded.`, "ok"); return; }
@@ -966,7 +1000,7 @@
     if (cp === "RECEIVED") extra.location = it ? stageOf(it.row) : "";
     if (cp === "PLACED") extra.location = it ? ((it.row.dest || "").trim().toUpperCase() || stageOf(it.row)) : "";
     const d = dirty; await record(mkEvent(cfg.who, id, cp, extra)); show(id, d ? keep : null);
-    setStatus(`${CLASSWORD[id[0]]} ${id.slice(1)}: ${cpWords[cp].toLowerCase()} recorded.`, "ok");
+    setStatus(`${CLASSWORD[id[0]]} ${id.slice(1)}: ${cpWords[cp].toLowerCase()} recorded.${savedFirst ? " Saved what you typed." : ""}`, "ok");
   }
   const lastContainer = () => { const all = mergeEvents(server, local); for (let i = all.length - 1; i >= 0; i--) if (all[i].container) return all[i].container; return ""; };
   const usedText = c => `${c.name} has already been ${c.last.type === "DEPARTED" ? verbFor(c.name) : c.last.type === "DELIVERED" ? "delivered" : "returned to the shipper"} (${whenText(c.last.ts)}). A container is used once — give this one a new name.`;
@@ -980,8 +1014,8 @@
       picking = { id, planned, targets, resolve };
       $("pick-id").textContent = `${CLASSWORD[id[0]]} ${id.slice(1)}`;
       $("pick-known-label").hidden = !targets.length; $("pick-container-label").textContent = (targets.length ? "Or type a new name" : "Type a name") + " (POD1, TRUCK …); a new name starts a new container";
-      $("pick-known").innerHTML = targets.map(c => `<button class="quiet" data-known="${esc(c.name)}" data-wave="${esc(c.wave || "")}">${esc(c.name)}${c.wave ? " · " + esc(waveShort(c.wave)) : ""}</button>`).join("");
-      $("pick-known").querySelectorAll("button").forEach(b => b.onclick = () => { $("pick-container").value = b.dataset.known; if (b.dataset.wave) $("pick-wave").value = b.dataset.wave; pickRefresh(); });
+      $("pick-known").innerHTML = targets.map(c => `<button class="quiet" data-known="${esc(c.name)}" data-known-wave="${esc(c.wave || "")}">${esc(c.name)}${c.wave ? " · " + esc(waveShort(c.wave)) : ""}</button>`).join("");
+      $("pick-known").querySelectorAll("button").forEach(b => b.onclick = () => { $("pick-container").value = b.dataset.known; if (b.dataset.knownWave) $("pick-wave").value = b.dataset.knownWave; pickRefresh(); });
       $("pick-wave").innerHTML = ["W1", "W2", "W3"].map(w => `<option value="${w}">${esc(waveFull(w, state.names))}</option>`).join("") + `<option value="">Not decided</option>`;
       $("pick-wave").value = inRun ? inRun.wave : planned;                                    // a paused loading session: its container and wave are the default
       $("pick-container").value = inRun ? inRun.container : "";
@@ -1077,7 +1111,9 @@
     $("run-known-label").hidden = !known.length; $("run-known").innerHTML = known.map(c => `<button class="quiet" data-known="${esc(c)}">${esc(c)}</button>`).join("");
     $("run-known").querySelectorAll("button").forEach(b => b.onclick = () => { $("run-container").value = b.dataset.known; $("run-known").querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b)); runStartReady(); });
   }
-  $("btn-run").onclick = () => { const p = $("run-setup"); $("browse-setup").hidden = true; if (scanning) stopScan(); p.hidden = !p.hidden; if (!p.hidden) { currentId = null; $("result").innerHTML = ""; fillRunChoices(); $("run-container").value = lastContainer() || ""; $("containers").innerHTML = Array.from(new Set(mergeEvents(server, local).map(e => e.container).filter(Boolean))).map(c => `<option value="${esc(c)}">`).join(""); } };
+  $("btn-run").onclick = () => { const p = $("run-setup"); $("browse-setup").hidden = true; if (scanning) stopScan(); p.hidden = !p.hidden; if (!p.hidden) { currentId = null; $("result").innerHTML = ""; fillRunChoices(); const open = loadingTargets(), lastOpen = open.find(c => c.name === lastContainer()) || (open.length === 1 ? open[0] : null);   // a name is offered only if it can still be loaded; a finished or emptied container is never a default
+      $("run-container").value = lastOpen ? lastOpen.name : ""; $("run-known").querySelectorAll("button").forEach(x => x.classList.toggle("on", !!lastOpen && x.dataset.known === lastOpen.name));
+      $("containers").innerHTML = open.map(c => `<option value="${esc(c.name)}">`).join(""); } };
   function runStartReady() { $("run-start").disabled = !pickedType || (pickedType === "LOADED" && !$("run-container").value.trim()); }
   $("run-container").addEventListener("input", runStartReady);
   $("run-types").querySelectorAll("button").forEach(b => b.onclick = () => { pickedType = b.dataset.type; $("run-types").querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b)); $("run-load-fields").hidden = pickedType !== "LOADED"; runStartReady(); if (pickedType === "LOADED" && !$("run-container").value.trim()) $("run-container").focus(); });
@@ -1168,21 +1204,38 @@
   let browse = store.get("lot26.browse") || null;                 // { ids, i, label }
   const known = () => Object.values(state.items).filter(i => !i.unknown).sort((a, b) => (a.id < b.id ? -1 : 1));
   const finalOf = i => (i.row.dest || "").trim().toUpperCase();
-  function browseMatches() { const st = $("br-stage").value, fi = $("br-final").value, wv = $("br-wave").value;
-    return known().filter(i => (!st || stageOf(i.row) === st) && (!fi || (fi === "(blank)" ? !finalOf(i) : finalOf(i) === fi)) && (wv === "*" || (i.loaded ? (i.loaded.wave || "") : i.plannedWave) === wv)); }
+  // One current state per item, the same buckets "Where everything is" counts; plus three yes/no questions the lists answer.
+  const BR_STATES = [["", "Any state"], ["none", "Not started"], ["STARTED", "Packing in progress"], ["READY", "Full — ready to seal"], ["SEALED", "Sealed, waiting for moving day"],
+    ["ONBOARD", "Loaded, still at TX"], ["TRANSIT", "En route to CA"], ["DELIVERED", "At CA home, not unloaded"], ["RECEIVED", "Arrived"], ["PLACED", "In their rooms"],
+    ["photo", "With at least one photo"], ["nophoto", "Without a photo"], ["noweight", "No weight yet"]];
+  const inState = (i, k) => !k ? true : k === "none" ? !i.last : k === "STARTED" || k === "READY" || k === "RECEIVED" || k === "PLACED" ? !!(i.last && i.last.type === k) : k === "SEALED" ? isSealed(i)
+    : k === "ONBOARD" || k === "TRANSIT" || k === "DELIVERED" ? !!(i.loaded && !i.arrived && i.phase === k) : k === "photo" ? !!i.photos.length : k === "nophoto" ? !i.photos.length : k === "noweight" ? i.weight == null : true;
+  const textOf = i => [i.id, i.row.contents, i.row.notes, i.row.unprinted_contents, i.row.unprinted_notes, i.row.private_notes, i.row.set_id, i.row.from_tx, disp(finalOf(i) || ""), disp(stageOf(i.row))].filter(Boolean).join("\n").toLowerCase();
+  function browseMatches() { const st = $("br-stage").value, fi = $("br-final").value, wv = $("br-wave").value, sk = $("br-state").value, cn = $("br-container").value, tx = $("br-text").value.trim().toLowerCase();
+    return known().filter(i => (!st || stageOf(i.row) === st) && (!fi || (fi === "(blank)" ? !finalOf(i) : finalOf(i) === fi)) && (wv === "*" || (i.loaded ? (i.loaded.wave || "") : i.plannedWave) === wv)
+      && inState(i, sk) && (!cn || (i.loaded && i.container === cn)) && (!tx || textOf(i).includes(tx))); }
   function fillBrowseChoices() {
-    const items = known(), opt = (v, t) => `<option value="${esc(v)}">${esc(t)}</option>`, keep = { s: $("br-stage").value, f: $("br-final").value, w: $("br-wave").value || "*" };
+    const items = known(), opt = (v, t) => `<option value="${esc(v)}">${esc(t)}</option>`, keep = { s: $("br-stage").value, f: $("br-final").value, w: $("br-wave").value || "*", k: $("br-state").value, c: $("br-container").value };
+    $("br-state").innerHTML = BR_STATES.map(([v, t]) => opt(v, t)).join("");
+    $("br-container").innerHTML = opt("", "Any container") + Object.values(state.containers || {}).filter(c => c.loaded).map(c => c.name).sort().map(c => opt(c, c)).join("");
     const stages = Array.from(new Set(items.map(i => stageOf(i.row)))).sort((a, b) => disp(a).localeCompare(disp(b))), finals = Array.from(new Set(items.map(finalOf).filter(Boolean))).sort((a, b) => disp(a).localeCompare(disp(b)));
     $("br-stage").innerHTML = opt("", "Any stage area") + stages.map(x => opt(x, disp(x))).join("");
     $("br-final").innerHTML = opt("", "Any final location") + finals.map(x => opt(x, disp(x))).join("") + (items.some(i => !finalOf(i)) ? opt("(blank)", "Write-in, not recorded yet") : "");
     $("br-wave").innerHTML = opt("*", "Any wave") + WAVES.map(w => opt(w, waveFull(w, state.names))).join("") + opt("", "No wave planned yet");
-    $("br-stage").value = keep.s; $("br-final").value = keep.f; $("br-wave").value = keep.w; renderBrowseList();
+    $("br-stage").value = keep.s; $("br-final").value = keep.f; $("br-wave").value = keep.w; $("br-state").value = keep.k; $("br-container").value = keep.c; renderBrowseList();
   }
-  function browseLabel() { const parts = [$("br-stage").value && disp($("br-stage").value), $("br-final").value && ($("br-final").value === "(blank)" ? "write-ins" : "→ " + disp($("br-final").value)), $("br-wave").value !== "*" && ($("br-wave").value ? waveShort($("br-wave").value) : "no wave yet")].filter(Boolean); return parts.join(" · ") || "Everything"; }
+  function browseLabel() { const sk = $("br-state").value, parts = [$("br-stage").value && disp($("br-stage").value), $("br-final").value && ($("br-final").value === "(blank)" ? "write-ins" : "→ " + disp($("br-final").value)), $("br-wave").value !== "*" && ($("br-wave").value ? waveShort($("br-wave").value) : "no wave yet"),
+    sk && (BR_STATES.find(([v]) => v === sk) || [])[1], $("br-container").value, $("br-text").value.trim() && `“${$("br-text").value.trim()}”`].filter(Boolean); return parts.join(" · ") || "Everything"; }
   function renderBrowseList() { const m = browseMatches(); $("br-count").textContent = `${m.length} item${m.length === 1 ? "" : "s"} match.`; $("br-start").disabled = !m.length;
     $("br-list").innerHTML = `<div class="idlist">${m.map((i, n) => `<button class="quiet" data-bidx="${n}"><b>${CLASSWORD[i.id[0]] || ""} ${i.id.slice(1)}</b><span>${esc(describe(i))}</span></button>`).join("")}</div>`;
     $("br-list").querySelectorAll("[data-bidx]").forEach(b => b.onclick = () => startBrowse(m.map(i => i.id), +b.dataset.bidx)); }
-  ["br-stage", "br-final", "br-wave"].forEach(k => $(k).onchange = renderBrowseList);
+  ["br-stage", "br-final", "br-wave", "br-state", "br-container"].forEach(k => $(k).onchange = renderBrowseList); $("br-text").oninput = renderBrowseList;
+  // Open Browse with filters preset — from a tapped line under "Where everything is" (state, wave or container); everything else cleared.
+  function openBrowse(preset) { if (scanning) stopScan(); $("run-setup").hidden = true; currentId = null; $("result").innerHTML = ""; $("browse-setup").hidden = false; fillBrowseChoices();
+    $("br-stage").value = ""; $("br-final").value = ""; $("br-wave").value = preset.wave != null ? preset.wave : "*"; $("br-state").value = preset.state || ""; $("br-container").value = preset.container || ""; $("br-text").value = "";
+    renderBrowseList(); renderModes(); $("browse-setup").scrollIntoView({ block: "start", behavior: "smooth" }); }
+  $("where").addEventListener("click", e => { const t = e.target.closest("[data-brs],[data-brw],[data-brc]"); if (!t) return;
+    openBrowse(t.dataset.brs != null ? { state: t.dataset.brs } : t.dataset.brw != null ? { wave: t.dataset.brw } : { container: t.dataset.brc }); });
   $("btn-browse").onclick = () => { const p = $("browse-setup"); if (scanning) stopScan(); $("run-setup").hidden = true; p.hidden = !p.hidden; if (!p.hidden) { currentId = null; $("result").innerHTML = ""; fillBrowseChoices(); } renderModes(); };
   $("br-cancel").onclick = () => { $("browse-setup").hidden = true; renderModes(); };
   $("br-start").onclick = () => startBrowse(browseMatches().map(i => i.id), 0);
@@ -1201,7 +1254,7 @@
     if (!dirty || !currentId) return 0; const k = keepFields(); if (!k) return 0; const id = currentId, it = state.items[id], r = it ? it.row : {}; let n = 0;
     const put = async (field, val, cur) => { if (val.trim() !== (cur || "").trim()) { await record(mkEvent(cfg.who, id, "EDIT", { field, value: val.trim() })); n++; } };
     await put("unprinted_contents", k.uc, r.unprinted_contents); await put("unprinted_notes", k.un, [r.unprinted_notes, r.private_notes].filter(x => x && x.trim()).join("\n"));
-    await put("contents", k.lc, r.contents); await put("notes", k.ln, r.notes); dirty = false; return n; }
+    await put("contents", k.lc, r.contents); await put("notes", k.ln, r.notes); const w = await saveWeight(id, it, k.wt); if (w) n += w; dirty = false; return n; }
   async function browseGo(d) { if (!browse) return; const j = browse.i + d; if (j < 0 || j >= browse.ids.length) return; const n = await saveDirty(); browse.i = j; store.set("lot26.browse", browse); setStatus(n ? "Saved what you typed on the last one." : "", n ? "ok" : ""); showBrowse(); decorateBrowseCard(d); }
   $("browse-prev").onclick = () => browseGo(-1); $("browse-next").onclick = () => browseGo(1);
   $("browse-done").onclick = async () => { const n = await saveDirty(); browse = null; store.set("lot26.browse", null); currentId = null; $("result").innerHTML = ""; renderModes(); setStatus(n ? "Saved what you typed. Finished browsing." : "Finished browsing.", "ok"); };
