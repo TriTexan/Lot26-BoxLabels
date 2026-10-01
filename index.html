@@ -222,6 +222,7 @@
     <label class="field">State<select id="br-state"></select></label>
     <label class="field">Container it was loaded into<select id="br-container"></select></label>
     <label class="field">Words on the card — contents, notes, what's inside, set, room<input id="br-text" type="search" placeholder="e.g. china, pantry, bags" autocomplete="off"></label>
+    <label class="field">Order<select id="br-sort"><option value="id">By number</option><option value="heaviest">Heaviest first — loading order (unweighed last)</option><option value="lightest">Lightest first</option></select></label>
     <p class="note" id="br-count"></p>
     <div class="row" style="margin-top:8px"><button id="br-start" disabled>Start with the first</button><button id="br-cancel" class="quiet">Cancel</button></div>
     <div id="br-list" style="margin-top:10px"></div>
@@ -230,6 +231,7 @@
   <div id="run-setup" class="panel" hidden>
     <p class="ptitle">What are you doing?</p>
     <div class="chips" id="run-types">
+      <button class="quiet" data-type="READY">Ready to seal</button>
       <button class="quiet" data-type="SEALED">Sealing</button>
       <button class="quiet" data-type="LOADED">Loading</button>
       <button class="quiet" data-type="RECEIVED">Unloading</button>
@@ -302,6 +304,7 @@
     </div>
   </details>
   <input id="cam" type="file" accept="image/*" capture="environment" hidden>
+  <input id="pick-photo" type="file" accept="image/*" multiple hidden>
 </main>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
@@ -337,7 +340,8 @@
   const WAVE_DEFAULTS = { W1: "the Pre-Pod", W2: "the main move", W3: "after the sale" };
   const waveShort = code => (code || "").replace(/^W/i, "Wave ");
   const waveFull = (code, names) => { const v = (names || {})["wave:" + code], n = (v != null ? v : (WAVE_DEFAULTS[code] || "")).trim(); return waveShort(code) + (n ? " — " + n : ""); };
-  const W1_WORDS = { MUST: "Must go", OK: "Can go if there's room" };      // asked only of items planned for Wave 1; "not going" is now said by planning another wave
+  const MUST_WORDS = { MUST: "Must go", OK: "Can go if there's room" };   // asked of every item with a planned wave, about that wave; for Wave 3 "OK" means it may stay behind
+  const W1_WORDS = MUST_WORDS;                                                // older name
   const WAVES = ["W1", "W2", "W3"];
 
   function uuid() {
@@ -379,13 +383,14 @@
     const undone = new Set(events.filter(e => e.type === "UNDO").map(e => e.value));
     const items = {}, containers = {}, names = {};
     const get = id => items[id] || (items[id] = { id, base: null, edits: {}, history: [], photos: [], unknown: true });
-    const box = name => containers[name] || (containers[name] = { name, events: [], wave: "", loaded: 0, checkedIn: 0, loadedWeight: 0, loadedNoWeight: 0 });
+    const box = name => containers[name] || (containers[name] = { name, events: [], wave: "", loaded: 0, checkedIn: 0, loadedWeight: 0, loadedNoWeight: 0, loadedValue: 0, loadedNoValue: 0, limit: null, byClass: { B: 0, F: 0, E: 0 } });
     for (const r of (rows || [])) { const id = (r.id || "").trim().toUpperCase(); if (id) { const it = get(id); it.base = r; it.unknown = false; } }
     for (const e of events) {
       if (e.type === "UNDO" && !e.id && e.container) { box(e.container).undoTs = e.ts; continue; }   // an undo of a container mark: one step back, and no second step until a new mark is made
       if (e.type === "UNDO" || undone.has(e.event_id)) continue;
       if (e.type === "NAME") { names[e.field] = e.value || ""; continue; }                // last one wins; events are oldest-first
       if (CONTAINER_TYPES.includes(e.type)) { if (e.container) box(e.container).events.push(e); continue; }
+      if (e.type === "LIMIT") { if (e.container) { const cb = box(e.container); cb.limit = weightOf(e.value); cb.limitTs = e.ts; if (e.wave && !cb.wave) cb.wave = e.wave; } continue; }   // the mover's weight limit for this pod or truck; a blank value clears it
       if (!(e.id || "").trim()) continue;
       const it = get((e.id || "").trim().toUpperCase());
       if (e.type === "EDIT") it.edits[e.field] = e.value;               // events are oldest-first, so the last write wins
@@ -404,11 +409,13 @@
       // planned wave: what we THINK it travels in (set on the card, or from inventory). Once loaded, the wave it was actually loaded in is the fact.
       const pw = ((it.edits.wave != null ? it.edits.wave : ((it.base || {}).wave || "")) || "").trim().toUpperCase(); it.plannedWave = WAVES.includes(pw) ? pw : "";
       it.row.wave = (it.loaded && it.loaded.wave) || it.plannedWave;
-      it.w1 = it.plannedWave === "W1" && W1_WORDS[(it.row.w1 || "").trim().toUpperCase()] ? (it.row.w1 || "").trim().toUpperCase() : "";
+      const mv = String(it.row.must || it.row.w1 || "").trim().toUpperCase();           // `must` since app 3.15; `w1` is the older name, only ever set for Wave 1 items
+      it.must = it.plannedWave && MUST_WORDS[mv] ? mv : ""; it.w1 = it.must;
       it.weight = weightOf(it.row.weight_lb);                                            // pounds, for the mover's limits; kept off the label
+      it.value = valueOf(it.row.value_usd);                                              // estimated value in dollars, for a loss or damage claim; kept off the label
       // Where is a loaded item? Only a container event made AFTER this item went in counts for it (a container name can be reused for a later trip).
       const c = it.loaded && it.container ? box(it.container) : null;
-      if (c) { c.loaded++; c.loadedWeight += it.weight || 0; if (it.weight == null) c.loadedNoWeight++; if (it.loaded.wave) c.wave = it.loaded.wave; else if (!c.wave && it.plannedWave) c.wave = it.plannedWave;   // a load made without a session wave: the plan stands in
+      if (c) { c.loaded++; c.byClass[it.id[0]] = (c.byClass[it.id[0]] || 0) + 1; c.loadedWeight += it.weight || 0; if (it.weight == null) c.loadedNoWeight++; c.loadedValue += it.value || 0; if (it.value == null) c.loadedNoValue++; if (it.loaded.wave) c.wave = it.loaded.wave; else if (!c.wave && it.plannedWave) c.wave = it.plannedWave;   // a load made without a session wave: the plan stands in
         if (it.arrived) { c.checkedIn++; const first = cps.find(e => (e.type === "RECEIVED" || e.type === "PLACED") && e.ts > it.loaded.ts);
           const wasAway = first && c.events.some(e => e.type === "DEPARTED" && e.ts > it.loaded.ts && e.ts < first.ts);   // only a container that was on its way can evidently have been delivered
           if (first && wasAway && (!c.evidentTs || first.ts < c.evidentTs)) { c.evidentTs = first.ts; c.evidentWho = first.who || ""; }
@@ -439,17 +446,24 @@
     return {
       counts,
       onboard: transit.filter(i => i.phase === "ONBOARD"), onTheWay: transit.filter(i => i.phase === "TRANSIT"), delivered: transit.filter(i => i.phase === "DELIVERED"),
-      containers: Object.values(state.containers || {}).filter(c => c.loaded || c.events.length).sort((a, b) => (a.name < b.name ? -1 : 1))
-        .map(c => { const na = c.wave ? all.filter(i => !i.unknown && !i.loaded && !i.received && i.plannedWave === c.wave) : [], sw = sumWeights(na);
-          // assigned = aboard here + planned for this container's wave and not yet loaded anywhere (the same items the not-aboard list shows)
-          return Object.assign(c, { notAboard: na, assignedCount: c.loaded + na.length, assignedWeight: c.loadedWeight + sw.lb, assignedNoWeight: c.loadedNoWeight + sw.none }); }),
+      containers: Object.values(state.containers || {}).filter(c => c.loaded || c.events.length || c.limit != null).sort((a, b) => (a.name < b.name ? -1 : 1))
+        .map(c => { const na = c.wave ? all.filter(i => !i.unknown && !i.loaded && !i.received && i.plannedWave === c.wave).sort((a, b) => (b.must === "MUST") - (a.must === "MUST")) : [], sw = sumWeights(na), sv = sumValues(na), m = na.filter(i => i.must === "MUST");
+          // still to load for this container's wave: planned for it and not yet loaded anywhere — the same items the not-aboard list shows; a wave with several open containers shares these numbers
+          return Object.assign(c, { notAboard: na, toLoadCount: na.length, toLoadWeight: sw.lb, toLoadNoWeight: sw.none, toLoadValue: sv.usd, toLoadNoValue: sv.none, toLoadMust: m.length, toLoadMustWeight: sumWeights(m).lb }); }),
       packing: all.filter(i => i.last && i.last.type === "STARTED"), readyToSeal: all.filter(i => i.last && i.last.type === "READY"), sealed: all.filter(i => isSealed(i)),
       // waveOf: the wave it was loaded in once it has been, otherwise the plan. An item that arrived without a loading scan keeps its planned wave.
       plan: WAVES.concat([""]).map(w => { const inW = all.filter(i => !i.unknown && waveOf(i) === w), n = k => inW.filter(i => stateOf(i) === k).length;
-        const sw = sumWeights(inW);
-        return { wave: w, total: inW.length, notLoaded: n("NOTLOADED"), onboard: n("ONBOARD"), transit: n("TRANSIT"), delivered: n("DELIVERED"), arrived: n("IN"), weight: sw.lb, noWeight: sw.none }; }),
-      mustNotLoaded: all.filter(i => i.w1 === "MUST" && !i.loaded && !i.received),     // arrived means it got there, loading scan or not
-      canGo: all.filter(i => i.w1 === "OK" && !i.loaded && !i.received),
+        const sw = sumWeights(inW), sv = sumValues(inW), must = inW.filter(i => i.must === "MUST"), can = inW.filter(i => i.must === "OK");
+        const tl = inW.filter(i => !i.loaded && !i.received), tlm = tl.filter(i => i.must === "MUST"), tw = sumWeights(tl), tv = sumValues(tl);
+        const byClass = { B: 0, F: 0, E: 0 }; inW.forEach(i => { byClass[i.id[0]] = (byClass[i.id[0]] || 0) + 1; });
+        return { wave: w, byClass, total: inW.length, notLoaded: n("NOTLOADED"), onboard: n("ONBOARD"), transit: n("TRANSIT"), delivered: n("DELIVERED"), arrived: n("IN"), weight: sw.lb, noWeight: sw.none, value: sv.usd, noValue: sv.none,
+          must: must.length, mustWeight: sumWeights(must).lb, can: can.length, canWeight: sumWeights(can).lb, undecided: inW.length - must.length - can.length,
+          toLoad: { count: tl.length, weight: tw.lb, noWeight: tw.none, value: tv.usd, noValue: tv.none, must: tlm.length, mustWeight: sumWeights(tlm).lb },
+          containers: Object.values(state.containers || {}).filter(c => (c.loaded || c.events.length || c.limit != null) && c.wave === w).sort((a, b) => a.name.localeCompare(b.name)) }; }),
+      // must go, not loaded, per wave: the audit list once a wave's containers have left, and the loading-day list while they are still here
+      mustNotLoadedByWave: Object.fromEntries(WAVES.map(w => [w, all.filter(i => i.must === "MUST" && i.plannedWave === w && !i.loaded && !i.received)])),
+      mustNotLoaded: all.filter(i => i.must === "MUST" && !i.loaded && !i.received),   // arrived means it got there, loading scan or not
+      canGo: all.filter(i => i.must === "OK" && !i.loaded && !i.received),
       inTransit: transit, byContainer
     };
   }
@@ -478,8 +492,23 @@
   const WEIGHT_RE = /^\d{1,4}(\.\d{1,2})?$/;                                       // pounds, up to 9999.99; anything else is "no weight", never a guess
   const weightOf = v => { const s = String(v == null ? "" : v).trim(); return WEIGHT_RE.test(s) ? +s : null; };
   const sumWeights = items => items.reduce((a, i) => ({ lb: a.lb + (i.weight || 0), none: a.none + (i.weight == null ? 1 : 0) }), { lb: 0, none: 0 });
+  const VALUE_RE = /^\d{1,7}(\.\d{1,2})?$/;                                        // dollars, up to 9,999,999.99; anything else is "no value", never a guess
+  const valueOf = v => { const s = String(v == null ? "" : v).trim(); return VALUE_RE.test(s) ? +s : null; };
+  const sumValues = items => items.reduce((a, i) => ({ usd: a.usd + (i.value || 0), none: a.none + (i.value == null ? 1 : 0) }), { usd: 0, none: 0 });
   const CONTAINER_RE = /^[A-Z0-9][A-Z0-9 _-]{0,29}$/;   // the same rule the Drive script applies to a pod or truck name when it is marked; checked at loading so no container can be named in a way the script will later refuse
+  // printed or not, contents or a note — the same test the card applies before "ready" or "sealed"
+  const described = r => !!(r && [r.unprinted_contents, r.contents, r.unprinted_notes, r.notes, r.private_notes].some(x => x && String(x).trim()));
+  // The other four labels print 6 to a sheet, 4 per box: 3 boxes fill 2 sheets exactly.
+  const sheetWords = n => { const labels = 4 * n, sheets = Math.ceil(labels / 6), blank = sheets * 6 - labels, more = (3 - n % 3) % 3;
+    return `${labels} labels = ${sheets} sheet${sheets === 1 ? "" : "s"}, ${blank ? `${blank} blank — ${more} more box${more === 1 ? "" : "es"} fill${more === 1 ? "s" : ""} them` : "none to spare"}`; };
   function runVerdict(item, run, now, cts, confirmed) {
+    if (run.type === "READY") {
+      if (item && item.loaded) return repeatVerdict(item.loaded, `Already loaded${item.container ? " in " + item.container : ""}`, "marking ready", now);
+      if (isSealed(item)) return repeatVerdict(item.last, "Already sealed — taped", "marking ready", now);
+      if (item && item.last && item.last.type === "READY") return repeatVerdict(item.last, "Already ready to seal", "marking ready", now);
+      const miss = [(!item || !item.photos.length) ? "no photo" : "", !(item && described(item.row)) ? "no description of what's inside" : ""].filter(Boolean);
+      return miss.length ? { log: true, tone: "warn", text: `Ready to seal — ${miss.join(", ")} yet` } : { log: true, tone: "ok", text: "Ready to seal" };
+    }
     if (run.type === "SEALED") {
       if (item && item.loaded) return repeatVerdict(item.loaded, `Already loaded${item.container ? " in " + item.container : ""}`, "sealing", now);
       if (isSealed(item)) return repeatVerdict(item.last, "Already sealed", "sealing", now);
@@ -539,7 +568,7 @@
     field: "", value: "", container: s.container || "", wave: "", location: s.location || "", photo: s.photo || "", note: s.note || "" });
 
   // ---- storage: small things in localStorage (shared with v1), events and photos in IndexedDB ----
-  const APP_VERSION = "Box app 3.13 (2026-09-28)";
+  const APP_VERSION = "Box app 3.17 (2026-10-03)";
   const $ = id => document.getElementById(id);
   const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const store = { get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } },
@@ -622,7 +651,7 @@
   const describe = i => { const r = i.row; return [disp(stageOf(r)), (r.contents || "").trim(), (r.unprinted_contents || "").trim().split("\n")[0]].filter(Boolean).join(" — "); };
   const idButtons = arr => `<div class="idlist">${arr.map(i => `<button class="quiet" data-open="${i.id}"><b>${CLASSWORD[i.id[0]] || ""} ${i.id.slice(1)}</b><span>${esc(describe(i))}</span></button>`).join("")}</div>`;
   const readyButtons = arr => `<div class="idlist">${arr.map(i => `<button class="quiet" data-open="${i.id}"><b>${CLASSWORD[i.id[0]] || ""} ${i.id.slice(1)}</b><span>${esc([describe(i), "ready since " + whenText(i.last.ts) + (i.last.who ? " (" + i.last.who + ")" : ""), i.photos.length ? "" : "no photo yet"].filter(Boolean).join(" · "))}</span></button>`).join("")}</div>`;
-  function renderReadyStrip() { const n = lists.readyToSeal.length, b = $("ready-strip"); b.hidden = !n || !!(run && run.type === "SEALED"); b.textContent = `${n} box${n === 1 ? "" : "es"} ready to seal — show`; }
+  function renderReadyStrip() { const n = lists.readyToSeal.length, b = $("ready-strip"); b.hidden = !n || !!(run && (run.type === "SEALED" || run.type === "READY")); b.textContent = `${n} box${n === 1 ? "" : "es"} ready to seal · ${sheetWords(n)} — show`; }
   $("ready-strip").onclick = () => { $("d-where").open = true; const t = document.getElementById("ready-list") || $("d-where"); t.scrollIntoView({ block: "start", behavior: "smooth" }); };
   function cardToTop(smooth) { const box = $("result"); if (!box.firstElementChild) return; const el = box.querySelector(".label") || box;   // the card itself: it sits 14 px inside its container
     const pad = ($("practice").hidden ? 0 : $("practice").offsetHeight) + ($("runbar").hidden ? 0 : $("runbar").offsetHeight + 8);
@@ -639,12 +668,15 @@
   function renderDayLists() {
     const el = $("daylists"); if (!run) { el.innerHTML = ""; return; }
     let h = "";
-    if (run.type === "SEALED") {
-      h += lists.readyToSeal.length ? `<div class="daylist"><h2>Ready to seal (${lists.readyToSeal.length})</h2>${readyButtons(lists.readyToSeal)}</div>` : `<div class="daylist done">Nothing is waiting to be sealed.</div>`;
+    if (run.type === "READY") {
+      h += `<div class="daylist"><h2>Ready to seal (${lists.readyToSeal.length})</h2><p class="note" style="margin:0 0 6px">${lists.readyToSeal.length ? esc(sheetWords(lists.readyToSeal.length)) + " — the label chat prints the other four per box" : "nothing yet"}</p>${lists.readyToSeal.length ? readyButtons(lists.readyToSeal) : ""}</div>`;
+      if (lists.packing.length) h += `<div class="daylist"><h2>Packing in progress (${lists.packing.length})</h2>${idButtons(lists.packing)}</div>`;
+    } else if (run.type === "SEALED") {
+      h += lists.readyToSeal.length ? `<div class="daylist"><h2>Ready to seal (${lists.readyToSeal.length})</h2><p class="note" style="margin:0 0 6px">${esc(sheetWords(lists.readyToSeal.length))}</p>${readyButtons(lists.readyToSeal)}</div>` : `<div class="daylist done">Nothing is waiting to be sealed.</div>`;
     } else if (run.type === "LOADED") {
-      h += lists.mustNotLoaded.length ? `<div class="daylist"><h2>Must go — not loaded yet (${lists.mustNotLoaded.length})</h2>${idButtons(lists.mustNotLoaded)}</div>`
-        : `<div class="daylist done">Every “Must go” item is loaded.</div>`;
-      if (lists.canGo.length) h += `<div class="daylist"><h2>Can go if there's room (${lists.canGo.length})</h2>${idButtons(lists.canGo)}</div>`;
+      const mn = run.wave ? lists.mustNotLoadedByWave[run.wave] : lists.mustNotLoaded, cg = run.wave ? lists.canGo.filter(i => i.plannedWave === run.wave) : lists.canGo, forW = run.wave ? " for " + waveShort(run.wave) : "";
+      h += mn.length ? `<div class="daylist"><h2>Must go — not loaded yet${esc(forW)} (${mn.length})</h2>${idButtons(mn)}</div>` : `<div class="daylist done">Every “Must go” item${esc(forW)} is loaded.</div>`;
+      if (cg.length) h += `<div class="daylist"><h2>${run.wave === "W3" ? "May stay behind" : "Can go if there's room"}${esc(forW)} (${cg.length})</h2>${idButtons(cg)}</div>`;
     } else if (run.type === "RECEIVED") {
       const gs = groupedTransit(lists.inTransit);
       h += gs.length ? `<div class="daylist"><h2>Loaded, not checked in yet (${lists.inTransit.length})</h2>${gs.map(g => `<h3 class="divider">${transitHeading(g)} (${g.items.length})</h3>${idButtons(g.items)}`).join("")}</div>`
@@ -667,25 +699,37 @@
         <span data-brs="photo">With at least one photo</span><b data-brs="photo">${c.photos}</b>
         ${c.unknown ? `<span>Scanned, but not in the inventory</span><b>${c.unknown}</b>` : ""}
       </div>
-      <div class="daylist"><h2>Plan by wave</h2>${lists.plan.map(x => `<div class="counts" style="margin:4px 0 8px"><span data-brw="${x.wave}"><b style="text-align:left">${esc(x.wave ? waveFull(x.wave, state.names) : "No wave planned yet")}</b></span><b data-brw="${x.wave}">${x.total}</b>
-        ${x.total ? `<span class="note" style="grid-column:1 / -1;margin:0">${[["notLoaded", "not loaded yet"], ["onboard", "loaded, still at TX"], ["transit", "en route to CA"], ["delivered", "at CA home, not unloaded"], ["arrived", "arrived"]].filter(([k]) => x[k]).map(([k, w]) => `${x[k]} ${w}`).join(" · ")} · ${fmtLb(x.weight)}${x.noWeight ? ` <span class="warn">(${x.noWeight} without a weight)</span>` : ""}</span>` : ""}</div>`).join("")}</div>
+      <div class="daylist"><h2>Plan by wave</h2>${lists.plan.map(x => `<div class="counts" style="margin:4px 0 8px"><span data-brw="${x.wave}"><b style="text-align:left">${esc(x.wave ? waveFull(x.wave, state.names) : "No wave planned yet")}</b>${x.total ? `<span class="note" style="margin:0 0 0 6px">${esc(classWords(x.byClass).replace(/^ \(|\)$/g, "") || "")}</span>` : ""}</span><b data-brw="${x.wave}">${x.total}</b>
+        ${x.total ? `<span class="note" style="grid-column:1 / -1;margin:0">${[["notLoaded", "not loaded yet"], ["onboard", "loaded, still at TX"], ["transit", "en route to CA"], ["delivered", "at CA home, not unloaded"], ["arrived", "arrived"]].filter(([k]) => x[k]).map(([k, w]) => `${x[k]} ${w}`).join(" · ")} · ${fmtLb(x.weight)}${x.noWeight ? ` <span class="warn">(${x.noWeight} without a weight)</span>` : ""} · ${fmtUsd(x.value)}${x.noValue ? ` <span class="warn">(${x.noValue} without a value)</span>` : ""}</span>${x.wave ? `<span class="note" style="grid-column:1/-1;margin:0">${x.must || x.can ? `${x.must} must go (${fmtLb(x.mustWeight)}) · ${x.can} ${x.wave === "W3" ? "may stay behind" : "can go if room"} (${fmtLb(x.canWeight)})${x.undecided ? ` · ${x.undecided} undecided` : ""}` : "no must-go answers yet"}</span>
+          <span class="note" style="grid-column:1/-1;margin:0">${x.containers.length ? x.containers.map(c => `<span data-brc="${esc(c.name)}">${esc(c.name)} · ${esc(lcFirst(stateWord(c.name, c.last ? c.last.type : "")))} · ${ofLimit(c.loadedWeight, c.limit)}</span>`).join("; ") : "no pod or truck started"} — ${x.toLoad.count ? `still to load: ${x.toLoad.count} item${x.toLoad.count === 1 ? "" : "s"} · ${fmtLb(x.toLoad.weight)} · ${fmtUsd(x.toLoad.value)}${x.toLoad.must ? ` · <b>${x.toLoad.must} must go</b> (${fmtLb(x.toLoad.mustWeight)})` : ""}` : "everything planned for it is loaded"}</span>` : ""}` : ""}</div>`).join("")}</div>
       ${lists.readyToSeal.length ? `<div class="daylist" id="ready-list"><h2>Ready to seal (${lists.readyToSeal.length})</h2>${readyButtons(lists.readyToSeal)}</div>` : ""}
       ${lists.packing.length ? `<div class="daylist"><h2>Packing in progress (${lists.packing.length})</h2>${idButtons(lists.packing)}</div>` : ""}
       ${lists.containers.length ? `<div class="daylist"><h2>Pods and trucks</h2>${lists.containers.map(containerCard).join("")}</div>` : ""}
-      ${lists.mustNotLoaded.length ? `<div class="daylist"><h2>Must go — not loaded yet (${lists.mustNotLoaded.length})</h2>${idButtons(lists.mustNotLoaded)}</div>` : ""}
+      ${WAVES.filter(w => lists.mustNotLoadedByWave[w].length).map(w => `<div class="daylist"><h2>Must go — not loaded yet: ${esc(waveShort(w))} (${lists.mustNotLoadedByWave[w].length})</h2>${idButtons(lists.mustNotLoadedByWave[w])}</div>`).join("")}
       ${lists.inTransit.length ? `<div class="daylist"><h2>Loaded, not checked in (${lists.inTransit.length})</h2>${groupedTransit(lists.inTransit).map(g => `<h3 class="divider">${transitHeading(g)} (${g.items.length})</h3>${idButtons(g.items)}`).join("")}</div>` : ""}
       <p class="note">${APP_VERSION}</p>`;
     wireOpen(el);
     el.querySelectorAll("[data-cmark]").forEach(b => b.onclick = () => markContainer(b.dataset.c, b.dataset.cmark));
     el.querySelectorAll("[data-cundo]").forEach(b => b.onclick = () => undoContainer(b.dataset.c));
+    el.querySelectorAll("[data-climit-save]").forEach(b => b.onclick = async () => {
+      const name = b.dataset.c, v = (el.querySelector(`[data-c="${CSS.escape(name)}"][data-climit]`).value || "").trim(), c = state.containers[name];
+      if (v && !/^\d{1,5}(\.\d{1,2})?$/.test(v)) { setStatus("The limit is pounds as a number — for example 4200. Not saved.", "warn"); return; }
+      if (serverOlderThan(2, 0)) { scriptNeedsUpdate("2.0"); return; }
+      if ((v === "" ? null : +v) === (c ? c.limit : null)) { setStatus(`${name}: the limit had not changed.`, "ok"); return; }
+      await record(mkEvent(cfg.who, "", "LIMIT", { container: name, wave: (c && c.wave) || "", value: v })); setStatus(v ? `${name}: limit ${fmtLb(+v)}.` : `${name}: limit cleared.`, "ok"); });
   }
   // One entry for the whole pod or truck. The item-by-item scans stay the audit record; this only says where the container is.
   // Where a container is, in four states: At Texas home → En route to CA → At CA home → Returned to shipper (a pod) / Departed CA home (a truck).
+  const lcFirst = s => s.charAt(0).toLowerCase() + s.slice(1);
+  const mustWord = (w, k) => (k === "MUST" ? "Must go" : w === "W3" ? "May stay behind — sell, donate, leave" : w === "W2" ? "Can go if there's room (else " + waveShort("W3") + ")" : "Can go if there's room");
   const stateWord = (name, type) => (!type ? "At Texas home" : type === "DEPARTED" ? "En route to CA" : type === "DELIVERED" ? "At CA home" : isTruck(name) ? "Departed CA home" : "Returned to shipper");
   const containerWords = { DEPARTED: "en route to CA", DELIVERED: "at CA home", RETURNED: "returned to shipper" };
   const markWord = (name, type) => (type === "DELIVERED" ? "delivered" : type === "RETURNED" ? finalWord(name) : verbFor(name));
   const fmtLb = n => (Number.isInteger(n) ? n.toLocaleString("en-US") : n.toLocaleString("en-US", { minimumFractionDigits: 1, maximumFractionDigits: 2 })) + " lb";
-  const weightLine = (lb, count, none) => `${fmtLb(lb)} · ${count} item${count === 1 ? "" : "s"}${none ? ` · <span class="warn">${none} without a weight</span>` : ""}`;
+  const fmtUsd = n => "$" + n.toLocaleString("en-US", { minimumFractionDigits: Number.isInteger(n) ? 0 : 2, maximumFractionDigits: 2 });
+  const classWords = bc => { const p = [[bc.B, "box", "boxes"], [bc.F, "furniture", "furniture"], [bc.E, "equipment", "equipment"]].filter(x => x[0]).map(x => `${x[0]} ${x[0] === 1 ? x[1] : x[2]}`); return p.length > 1 ? ` (${p.join(" · ")})` : ""; };
+  const ofLimit = (lb, limit) => limit == null ? fmtLb(lb) : lb > limit ? `<span class="warn">${fmtLb(lb)} of ${fmtLb(limit)} — ${fmtLb(lb - limit)} OVER</span>` : `${fmtLb(lb)} of ${fmtLb(limit)} — ${fmtLb(limit - lb)} left`;
+  const weightLine = (lb, count, none, usd, noneV, limit, bc) => `${ofLimit(lb, limit)} · ${count} item${count === 1 ? "" : "s"}${bc ? classWords(bc) : ""}${none ? ` · <span class="warn">${none} without a weight</span>` : ""} · ${fmtUsd(usd)}${noneV ? ` <span class="warn">(${noneV} without a value)</span>` : ""}`;
   function containerCard(c) {
     const evident = !!(c.evidentTs && c.last && c.last.type === "DEPARTED");     // "evidently delivered" only while it is still marked as on the way
     const st = evident ? `<b>At CA home</b>, evidently — ${c.checkedIn} box${c.checkedIn === 1 ? "" : "es"} from it checked in since ${whenText(c.evidentTs)}${c.evidentWho ? " (" + esc(c.evidentWho) + ")" : ""}; not marked`
@@ -694,11 +738,12 @@
     const aboard = c.loaded - c.checkedIn, na = c.notAboard || [];
     return `<div class="panel" style="margin-top:8px"><p class="ptitle">${esc(c.name)}${c.wave ? " · " + esc(waveFull(c.wave, state.names)) : ""}</p>
       <p style="margin:0 0 4px;font-size:17px">Status: ${st}</p>
-      <p style="margin:0 0 4px;font-size:15px;line-height:1.35">${!c.last ? `<b>Assigned</b> ${weightLine(c.assignedWeight, c.assignedCount, c.assignedNoWeight)}<br>` : ""}<b>Loaded</b> ${weightLine(c.loadedWeight, c.loaded, c.loadedNoWeight)}</p>
+      <p style="margin:0 0 4px;font-size:15px;line-height:1.35"><b>Loaded</b> ${weightLine(c.loadedWeight, c.loaded, c.loadedNoWeight, c.loadedValue, c.loadedNoValue, c.limit, c.byClass)}${!c.last && c.wave ? `<br><b>Still to load for ${esc(waveShort(c.wave))}</b> ${c.toLoadCount ? weightLine(c.toLoadWeight, c.toLoadCount, c.toLoadNoWeight, c.toLoadValue, c.toLoadNoValue) + (c.toLoadMust ? ` · <b>${c.toLoadMust} must go</b> (${fmtLb(c.toLoadMustWeight)})` : "") : "nothing"}` : ""}</p>
       <p class="note" style="margin:0 0 6px;font-size:15px"><span data-brc="${esc(c.name)}">${c.loaded} loaded</span> · ${aboard} aboard · ${c.checkedIn} checked in</p>
       ${c.returned && aboard ? `<p class="note warn" style="margin:0 0 6px">${aboard} box${aboard === 1 ? "" : "es"} loaded into ${esc(c.name)} ${aboard === 1 ? "was" : "were"} never checked in and the container has gone back — ${aboard === 1 ? "it is" : "they are"} missing unless ${aboard === 1 ? "it" : "they"} came out without a scan. See "Loaded, not checked in".</p>` : ""}
       ${c.outOfTurn ? `<p class="note warn" style="margin:0 0 6px">${c.outOfTurn} box${c.outOfTurn === 1 ? " was" : "es were"} checked in at the other end although ${esc(c.name)} was never marked ${verbFor(c.name)} — someone confirmed it out of turn; check the records.</p>` : ""}
-      ${!c.last && c.wave ? (na.length ? `<details style="margin:0 0 8px"><summary class="note warn" style="cursor:pointer">Not aboard yet: ${na.length} of ${esc(waveShort(c.wave))} — check before it leaves</summary>${idButtons(na)}</details>` : `<p class="note" style="margin:0 0 8px;color:var(--ok)">Everything planned for ${esc(waveShort(c.wave))} is aboard.</p>`) : ""}
+      ${!c.last ? `<div class="row" style="margin:0 0 8px;align-items:end"><label class="field" style="flex:1;margin:0">Weight limit, lb (the mover's figure for this ${isTruck(c.name) ? "truck" : "pod"})<input type="number" inputmode="decimal" min="0" max="99999" step="1" data-c="${esc(c.name)}" data-climit value="${c.limit != null ? c.limit : ""}" placeholder="not set"></label><button class="quiet" style="padding:10px 14px" data-c="${esc(c.name)}" data-climit-save>Save</button></div>` : ""}
+      ${!c.last && c.wave ? (na.length ? `<details style="margin:0 0 8px"><summary class="note warn" style="cursor:pointer">Not aboard yet: ${na.length} of ${esc(waveShort(c.wave))}${c.toLoadMust ? ` (${c.toLoadMust} must go)` : ""} — check before it leaves</summary>${idButtons(na)}</details>` : `<p class="note" style="margin:0 0 8px;color:var(--ok)">Everything planned for ${esc(waveShort(c.wave))} is aboard.</p>`) : ""}
 
       <div class="row">${next ? `<button data-c="${esc(c.name)}" data-cmark="${next[0]}">${next[1]}</button>` : ""}${c.last && !c.undoLocked ? `<button class="quiet" data-c="${esc(c.name)}" data-cundo="1">Undo “${markWord(c.name, c.last.type)}”</button>` : ""}</div>${c.undoLocked ? `<p class="note" style="margin:8px 0 0">Undone once. A correction goes back one step only; for anything bigger, ask the design chat.</p>` : ""}</div>`;
   }
@@ -892,9 +937,9 @@
     const hand = [r.contents, r.notes].filter(x => x && x.trim()).join("\n");
     const had = (k, v) => (keep && keep[k] != null ? keep[k] : v);
     const uc = had("uc", r.unprinted_contents || ""), un = had("un", [r.unprinted_notes, r.private_notes].filter(x => x && x.trim()).join("\n"));
-    const pw = it ? it.plannedWave : "", wt = had("wt", it && it.weight != null ? String(it.weight) : "");
+    const pw = it ? it.plannedWave : "", wt = had("wt", it && it.weight != null ? String(it.weight) : ""), val = had("val", it && it.value != null ? String(it.value) : "");
     const lc = had("lc", r.contents || ""), ln = had("ln", r.notes || ""), labelChanged = !!(it && (it.edits.contents !== undefined || it.edits.notes !== undefined));
-    const hist = it ? it.history : [], nPhotos = it ? it.photos.length : 0, w1 = it ? it.w1 : "";
+    const hist = it ? it.history : [], nPhotos = it ? it.photos.length : 0, must = it ? it.must : "";
     out.innerHTML = `
       <div class="label">
         ${labelBlock(id, !it || it.unknown ? null : st)}
@@ -908,13 +953,15 @@
           <div class="edit">
             ${it && it.loaded && it.loaded.wave ? "" : `<div class="elabel">Which wave is it planned for?</div>
             <div class="chips">${WAVES.map(w => `<button class="quiet ${pw === w ? "on" : ""}" data-wave="${w}">${esc(waveFull(w, state.names))}</button>`).join("")}</div>`}
-            ${pw === "W1" && !(it && it.loaded && it.loaded.wave) ? `<div class="elabel">Going in ${esc(waveName("W1"))}?</div>
-            <div class="chips">${Object.keys(W1_WORDS).map(k => `<button class="quiet ${w1 === k ? "on" : ""}" data-w1="${k}">${W1_WORDS[k]}</button>`).join("")}</div>` : ""}
+            ${pw && !(it && it.loaded && it.loaded.wave) ? `<div class="elabel">Going in ${esc(waveName(pw))}?</div>
+            <div class="chips">${Object.keys(MUST_WORDS).map(k => `<button class="quiet ${must === k ? "on" : ""}" data-must="${k}">${esc(mustWord(pw, k))}</button>`).join("")}</div>` : ""}
             ${!(base.dest || "").trim() ? `<label class="field">Final location written on this label<select id="ed-dest"><option value="">— choose —</option>${DEST_CHOICES.map(d => `<option value="${d}" ${d === dest ? "selected" : ""}>${esc(disp(d))}</option>`).join("")}</select></label>` : ""}
             <label class="field">What's inside — kept off the label<textarea id="ed-uc" rows="3">${esc(uc)}</textarea></label>
             <label class="field">Notes — kept off the label<textarea id="ed-un" rows="2">${esc(un)}</textarea></label>
             <label class="field">Weight, lb — for the mover's limits; kept off the label<input id="ed-wt" type="number" inputmode="decimal" min="0" max="9999" step="0.5" placeholder="not weighed yet" value="${esc(wt)}"></label>
+            <label class="field">Estimated value, $ — what's inside, for a loss or damage claim; kept off the label<input id="ed-val" type="text" inputmode="decimal" placeholder="e.g. 250" autocomplete="off" value="${esc(val)}"></label>
             <div class="row" style="margin-top:10px"><button class="save" id="ed-save">Save details</button><button class="quiet" id="ed-photo">Take a photo</button></div>
+            <div class="row" style="margin-top:8px"><button class="quiet" id="ed-pick">Add a photo you already took</button></div>
             <div class="thumbs">${(it ? it.photos : []).map((ph, i) => `<button class="ptile" data-ph="${i}" aria-label="Open photo ${i + 1}">${thumbURL[ph.name] ? `<img src="${thumbURL[ph.name]}" alt="">` : `<span>Photo ${i + 1}<small>tap to open</small></span>`}</button>`).join("")}</div>
             <div class="pcount">${nPhotos ? `${nPhotos} photo${nPhotos === 1 ? "" : "s"} recorded for this one` : "No photos yet"}</div>
             <details class="labeltext" ${keep && keep.open ? "open" : ""}><summary>Change what's printed on the remaining labels</summary>
@@ -935,7 +982,7 @@
       </div>`;
     if (browse && browse.ids[browse.i] === id) setTimeout(() => decorateBrowseCard(), 0);
     const keepNow = keepFields;
-    ["ed-uc", "ed-un", "ed-wt", "ed-lc", "ed-ln"].forEach(k => $(k).oninput = () => { dirty = true; });
+    ["ed-uc", "ed-un", "ed-wt", "ed-val", "ed-lc", "ed-ln"].forEach(k => $(k).oninput = () => { dirty = true; });
     $("ed-lsave").onclick = async () => {
       const k = keepFields(); let n = 0;
       if (k.lc.trim() !== (r.contents || "").trim()) { await record(mkEvent(cfg.who, id, "EDIT", { field: "contents", value: k.lc.trim() })); n++; }
@@ -944,16 +991,18 @@
     };
     out.querySelectorAll("[data-wave]").forEach(b => b.onclick = async () => { if (serverOlderThan(1, 5)) { scriptNeedsUpdate("1.5"); return; }
       const k = keepNow(), d = dirty; await record(mkEvent(cfg.who, id, "EDIT", { field: "wave", value: pw === b.dataset.wave ? "" : b.dataset.wave })); show(id, d ? k : null); });
-    out.querySelectorAll("[data-w1]").forEach(b => b.onclick = async () => { const k = keepNow(), d = dirty; await record(mkEvent(cfg.who, id, "EDIT", { field: "w1", value: w1 === b.dataset.w1 ? "" : b.dataset.w1 })); show(id, d ? k : null); });
+    out.querySelectorAll("[data-must]").forEach(b => b.onclick = async () => { if (serverOlderThan(1, 9)) { scriptNeedsUpdate("1.9"); return; } const k = keepNow(), d = dirty; await record(mkEvent(cfg.who, id, "EDIT", { field: "must", value: must === b.dataset.must ? "" : b.dataset.must })); show(id, d ? k : null); });
     if ($("ed-dest")) $("ed-dest").onchange = async e => { const k = keepNow(), d = dirty; await record(mkEvent(cfg.who, id, "EDIT", { field: "dest", value: e.target.value })); show(id, d ? k : null); setStatus("Final location recorded.", "ok"); };
     $("ed-save").onclick = async () => {
       const k = keepNow(); let n = 0;
       if (k.uc.trim() !== (r.unprinted_contents || "").trim()) { await record(mkEvent(cfg.who, id, "EDIT", { field: "unprinted_contents", value: k.uc.trim() })); n++; }
       if (k.un.trim() !== [r.unprinted_notes, r.private_notes].filter(x => x && x.trim()).join("\n").trim()) { await record(mkEvent(cfg.who, id, "EDIT", { field: "unprinted_notes", value: k.un.trim() })); n++; }
       const w = await saveWeight(id, it, k.wt); if (w === false) { show(id, k); return; } n += w;
+      const v = await saveValue(id, it, k.val); if (v === false) { show(id, k); return; } n += v;
       show(id, k.open ? { lc: k.lc, ln: k.ln, open: true } : null); setStatus(n ? "Details saved." : "Nothing had changed.", "ok");
     };
     $("ed-photo").onclick = () => { photoFor = id; $("cam").click(); };
+    $("ed-pick").onclick = () => { photoFor = id; $("pick-photo").click(); };
     out.querySelectorAll(".ptile").forEach(b => { const ph = it.photos[+b.dataset.ph]; b.onclick = () => openViewer(id, ph);
       if (!thumbURL[ph.name]) idb.getThumb(ph.name).then(bl => { if (bl && b.isConnected) { thumbURL[ph.name] = URL.createObjectURL(bl); b.innerHTML = `<img src="${thumbURL[ph.name]}" alt="">`; } }); });
     out.querySelectorAll("[data-cp]").forEach(b => b.onclick = () => logCheckpoint(id, b.dataset.cp, keepNow()));
@@ -961,10 +1010,17 @@
       const k = keepNow(), d = dirty; await record(mkEvent(cfg.who, id, "UNDO", { value: last.event_id })); show(id, d ? k : null); setStatus("Undone.", "ok"); };
   }
 
-  const described = r => !!(r && [r.unprinted_contents, r.contents, r.unprinted_notes, r.notes, r.private_notes].some(x => x && String(x).trim()));   // printed or not, contents or a note
   const missingBeforeSeal = it => [(!it || !it.photos.length) ? "no photo of the contents" : "", !(it && described(it.row)) ? "no description of what's inside" : ""].filter(Boolean);
   function keepFields() { if (!$("ed-uc")) return null; const lt = document.querySelector("#result .labeltext");
-    return { uc: $("ed-uc").value, un: $("ed-un").value, wt: $("ed-wt").value, lc: $("ed-lc").value, ln: $("ed-ln").value, open: !!(lt && lt.open) }; }
+    return { uc: $("ed-uc").value, un: $("ed-un").value, wt: $("ed-wt").value, val: $("ed-val").value, lc: $("ed-lc").value, ln: $("ed-ln").value, open: !!(lt && lt.open) }; }
+  // The estimated value: dollars for a claim, up to 9,999,999.99, blank = not estimated. Typed "$1,250" is read as 1250. Needs Drive script 1.8.
+  async function saveValue(id, it, typed) {
+    const v = String(typed == null ? "" : typed).trim().replace(/^\$/, "").replace(/,/g, ""), cur = it && it.value != null ? String(it.value) : "";
+    if (v === cur || (v && cur && +v === +cur)) return 0;
+    if (v && !/^\d{1,7}(\.\d{1,2})?$/.test(v)) { setStatus("The value is dollars as a number, up to 9,999,999 — for example 250 or 1250.50. Not saved.", "warn"); return false; }
+    if (serverOlderThan(1, 8)) { scriptNeedsUpdate("1.8"); return false; }
+    await record(mkEvent(cfg.who, id, "EDIT", { field: "value_usd", value: v })); return 1;
+  }
   // The weight: pounds for the mover's limits, up to 9999.99, blank = not weighed. Needs Drive script 1.7 (an older script would reject the field).
   // Returns 1 (saved), 0 (unchanged), false (refused — the typed value stays on the card so it can be fixed).
   async function saveWeight(id, it, typed) {
@@ -1004,7 +1060,7 @@
   }
   const lastContainer = () => { const all = mergeEvents(server, local); for (let i = all.length - 1; i >= 0; i--) if (all[i].container) return all[i].container; return ""; };
   const usedText = c => `${c.name} has already been ${c.last.type === "DEPARTED" ? verbFor(c.name) : c.last.type === "DELIVERED" ? "delivered" : "returned to the shipper"} (${whenText(c.last.ts)}). A container is used once — give this one a new name.`;
-  const loadingTargets = () => Object.values(state.containers).filter(c => c.loaded && !c.used).sort((a, b) => a.name.localeCompare(b.name));   // still being loaded; a container marked anything is finished as a target
+  const loadingTargets = () => Object.values(state.containers).filter(c => (c.loaded || c.limit != null) && !c.used).sort((a, b) => a.name.localeCompare(b.name));   // still being loaded; a container marked anything is finished as a target
 
   // ---- "Which container?" for the card's Loaded: chips for containers still being loaded (each with its wave), or a new name; the wave is shown, never assumed ----
   let picking = null;
@@ -1087,22 +1143,33 @@
       return out || file;
     } catch (e) { return file; }
   }
-  $("cam").onchange = async e => {
-    const f = e.target.files[0], id = photoFor; e.target.value = ""; if (!f || !id) return;
-    setStatus("Keeping the photo…");
-    try {
-      const blob = await shrink(f, cfg.photoMax), when = new Date(), name = photoName(id, when, cfg.who);
-      const ev = mkEvent(cfg.who, id, "PHOTO", { photo: name, ts: when.toISOString() });
-      await idb.putPhoto({ key: ev.event_id, ns: ns(), name, blob, event: wire(ev) });
-      photosWaiting++; const small = await shrink(blob, 320); await idb.putThumb(name, small); thumbURL[name] = URL.createObjectURL(small); fullURL[name] = URL.createObjectURL(blob);
-      const k = keepFields(), d = dirty;
-      await record(ev); if (currentId === id) show(id, d ? k : null);
-      setStatus(`Photo kept as ${name}${cfg.url ? " — uploading" : ""}.`, "ok");
-    } catch (er) { setStatus("The photo could not be kept on this phone (storage problem). It was not recorded — take it again after freeing space.", "warn"); }
-  };
+  // Keep one photo for a box: shrink (unless Full size), name it, record it, thumbnail it. The camera and the chooser both come here.
+  // A chosen photo is named by the file's own date when that is sane (so the name says when it was taken), and its row says it was added later.
+  async function keepPhoto(id, f, chosen) {
+    const now = new Date(), fd = new Date(f.lastModified || 0), sane = chosen && fd.getFullYear() >= 2000 && fd.getTime() <= now.getTime() + 60000;
+    let when = sane ? fd : now, name = photoName(id, when, cfg.who);
+    const taken = () => (state.items[id] ? state.items[id].photos : []).some(ph => ph.name === name) || name in thumbURL;
+    while (taken()) { when = new Date(when.getTime() + 1000); name = photoName(id, when, cfg.who); }   // two files from the same second never share a name
+    const blob = await shrink(f, cfg.photoMax);
+    const ev = mkEvent(cfg.who, id, "PHOTO", { photo: name, ts: now.toISOString(), note: chosen ? `added from the phone's photos${sane ? "; file dated " + whenText(fd.toISOString()) : ""}` : "" });
+    await idb.putPhoto({ key: ev.event_id, ns: ns(), name, blob, event: wire(ev) });
+    photosWaiting++; const small = await shrink(blob, 320); await idb.putThumb(name, small); thumbURL[name] = URL.createObjectURL(small); fullURL[name] = URL.createObjectURL(blob);
+    await record(ev); return name;
+  }
+  async function keepPhotos(files, id, chosen) {
+    if (!files.length || !id) return;
+    setStatus(files.length > 1 ? `Keeping ${files.length} photos…` : "Keeping the photo…");
+    const k = keepFields(), d = dirty, names = [];
+    try { for (const f of files) names.push(await keepPhoto(id, f, chosen)); }
+    catch (er) { setStatus(`The photo could not be kept on this phone (storage problem). ${names.length} kept, the rest not recorded — try again after freeing space.`, "warn"); }
+    if (currentId === id) show(id, d ? k : null);
+    if (names.length) setStatus(`${names.length > 1 ? names.length + " photos kept, the last as " : "Photo kept as "}${names[names.length - 1]}${cfg.url ? " — uploading" : ""}.`, "ok");
+  }
+  $("cam").onchange = e => { const files = Array.from(e.target.files), id = photoFor; e.target.value = ""; keepPhotos(files, id, false); };
+  $("pick-photo").onchange = e => { const files = Array.from(e.target.files), id = photoFor; e.target.value = ""; keepPhotos(files, id, true); };
 
   // ---- a loading / unloading run ----
-  const runWords = { SEALED: "Sealing", LOADED: "Loading", RECEIVED: "Unloading", PLACED: "Putting in rooms" };
+  const runWords = { READY: "Marking full — ready to seal", SEALED: "Sealing", LOADED: "Loading", RECEIVED: "Unloading", PLACED: "Putting in rooms" };
   let pickedType = null;
   function renderModes() { $("main-actions").hidden = !!run || !!browse; $("browsebar").hidden = !browse || !!run; $("btn-browse").classList.toggle("on", !$("browse-setup").hidden); $("btn-scan").classList.toggle("on", scanning && !run); $("btn-scan").textContent = scanning && !run ? "Stop scanning" : "Scan Single Label"; $("btn-run").classList.toggle("on", !$("run-setup").hidden); }
   function fillRunChoices() {
@@ -1137,7 +1204,8 @@
   function renderRun() {
     $("runbar").hidden = !run; renderModes(); if (!run) return;
     $("run-pause").textContent = scanning ? "Pause camera" : "Resume scanning";
-    $("run-what").innerHTML = `${runWords[run.type]}${run.container ? " → " + esc(run.container) : ""}${run.wave ? " · " + waveShort(run.wave) : ""}<small>${run.count} recorded this session${scanning ? "" : " — camera paused"}</small>`;
+    const rc = run.container && state.containers[run.container];
+    $("run-what").innerHTML = `${runWords[run.type]}${run.container ? " → " + esc(run.container) : ""}${run.wave ? " · " + waveShort(run.wave) : ""}<small>${run.count} recorded this session${rc && run.type === "LOADED" ? ` · aboard ${ofLimit(rc.loadedWeight, rc.limit)}${rc.loadedNoWeight ? ` (${rc.loadedNoWeight} unweighed)` : ""}` : ""}${scanning ? "" : " — camera paused"}</small>`;
   }
   let lastRunHit = "", lastRunAt = 0, blocked = false, alarmTimer = null;
   function raiseAlarm(id, v) {
@@ -1176,7 +1244,7 @@
     const it = state.items[id], v = runVerdict(it, run, now, state.containers, !!confirmedNote); let ev = null;
     if (v.ask) { raiseAsk(id, v, confirmedNote); return; }
     if (v.log) {
-      const extra = run.type === "SEALED" ? {} : run.type === "LOADED" ? { container: run.container, wave: run.wave } : { location: it ? (run.type === "PLACED" ? ((it.row.dest || "").trim().toUpperCase() || stageOf(it.row)) : stageOf(it.row)) : "" };
+      const extra = run.type === "SEALED" || run.type === "READY" ? {} : run.type === "LOADED" ? { container: run.container, wave: run.wave } : { location: it ? (run.type === "PLACED" ? ((it.row.dest || "").trim().toUpperCase() || stageOf(it.row)) : stageOf(it.row)) : "" };
       if (confirmedNote) extra.note = confirmedNote;
       run.count++; store.set("lot26.run", run); ev = await record(mkEvent(cfg.who, id, run.type, extra));
     }
@@ -1207,13 +1275,17 @@
   // One current state per item, the same buckets "Where everything is" counts; plus three yes/no questions the lists answer.
   const BR_STATES = [["", "Any state"], ["none", "Not started"], ["STARTED", "Packing in progress"], ["READY", "Full — ready to seal"], ["SEALED", "Sealed, waiting for moving day"],
     ["ONBOARD", "Loaded, still at TX"], ["TRANSIT", "En route to CA"], ["DELIVERED", "At CA home, not unloaded"], ["RECEIVED", "Arrived"], ["PLACED", "In their rooms"],
-    ["photo", "With at least one photo"], ["nophoto", "Without a photo"], ["noweight", "No weight yet"]];
+    ["photo", "With at least one photo"], ["nophoto", "Without a photo"], ["noweight", "No weight yet"], ["novalue", "No value yet"],
+    ["must", "Must go (its wave)"], ["mustleft", "Must go — not loaded yet"], ["can", "Can go if room / may stay behind"], ["undecided", "Wave planned, must-go not answered"]];
   const inState = (i, k) => !k ? true : k === "none" ? !i.last : k === "STARTED" || k === "READY" || k === "RECEIVED" || k === "PLACED" ? !!(i.last && i.last.type === k) : k === "SEALED" ? isSealed(i)
-    : k === "ONBOARD" || k === "TRANSIT" || k === "DELIVERED" ? !!(i.loaded && !i.arrived && i.phase === k) : k === "photo" ? !!i.photos.length : k === "nophoto" ? !i.photos.length : k === "noweight" ? i.weight == null : true;
+    : k === "ONBOARD" || k === "TRANSIT" || k === "DELIVERED" ? !!(i.loaded && !i.arrived && i.phase === k) : k === "photo" ? !!i.photos.length : k === "nophoto" ? !i.photos.length : k === "noweight" ? i.weight == null : k === "novalue" ? i.value == null
+    : k === "must" ? i.must === "MUST" : k === "mustleft" ? i.must === "MUST" && !i.loaded && !i.received : k === "can" ? i.must === "OK" : k === "undecided" ? !!i.plannedWave && !i.must : true;
   const textOf = i => [i.id, i.row.contents, i.row.notes, i.row.unprinted_contents, i.row.unprinted_notes, i.row.private_notes, i.row.set_id, i.row.from_tx, disp(finalOf(i) || ""), disp(stageOf(i.row))].filter(Boolean).join("\n").toLowerCase();
+  const browseSort = (arr, how) => how === "heaviest" ? arr.slice().sort((a, b) => (a.weight == null) - (b.weight == null) || (b.weight || 0) - (a.weight || 0) || (a.id < b.id ? -1 : 1))
+    : how === "lightest" ? arr.slice().sort((a, b) => (a.weight == null) - (b.weight == null) || (a.weight || 0) - (b.weight || 0) || (a.id < b.id ? -1 : 1)) : arr;   // unweighed items go last either way
   function browseMatches() { const st = $("br-stage").value, fi = $("br-final").value, wv = $("br-wave").value, sk = $("br-state").value, cn = $("br-container").value, tx = $("br-text").value.trim().toLowerCase();
-    return known().filter(i => (!st || stageOf(i.row) === st) && (!fi || (fi === "(blank)" ? !finalOf(i) : finalOf(i) === fi)) && (wv === "*" || (i.loaded ? (i.loaded.wave || "") : i.plannedWave) === wv)
-      && inState(i, sk) && (!cn || (i.loaded && i.container === cn)) && (!tx || textOf(i).includes(tx))); }
+    return browseSort(known().filter(i => (!st || stageOf(i.row) === st) && (!fi || (fi === "(blank)" ? !finalOf(i) : finalOf(i) === fi)) && (wv === "*" || (i.loaded ? (i.loaded.wave || "") : i.plannedWave) === wv)
+      && inState(i, sk) && (!cn || (i.loaded && i.container === cn)) && (!tx || textOf(i).includes(tx))), $("br-sort").value); }
   function fillBrowseChoices() {
     const items = known(), opt = (v, t) => `<option value="${esc(v)}">${esc(t)}</option>`, keep = { s: $("br-stage").value, f: $("br-final").value, w: $("br-wave").value || "*", k: $("br-state").value, c: $("br-container").value };
     $("br-state").innerHTML = BR_STATES.map(([v, t]) => opt(v, t)).join("");
@@ -1227,12 +1299,13 @@
   function browseLabel() { const sk = $("br-state").value, parts = [$("br-stage").value && disp($("br-stage").value), $("br-final").value && ($("br-final").value === "(blank)" ? "write-ins" : "→ " + disp($("br-final").value)), $("br-wave").value !== "*" && ($("br-wave").value ? waveShort($("br-wave").value) : "no wave yet"),
     sk && (BR_STATES.find(([v]) => v === sk) || [])[1], $("br-container").value, $("br-text").value.trim() && `“${$("br-text").value.trim()}”`].filter(Boolean); return parts.join(" · ") || "Everything"; }
   function renderBrowseList() { const m = browseMatches(); $("br-count").textContent = `${m.length} item${m.length === 1 ? "" : "s"} match.`; $("br-start").disabled = !m.length;
-    $("br-list").innerHTML = `<div class="idlist">${m.map((i, n) => `<button class="quiet" data-bidx="${n}"><b>${CLASSWORD[i.id[0]] || ""} ${i.id.slice(1)}</b><span>${esc(describe(i))}</span></button>`).join("")}</div>`;
+    const byW = $("br-sort").value !== "id";
+    $("br-list").innerHTML = `<div class="idlist">${m.map((i, n) => `<button class="quiet" data-bidx="${n}"><b>${CLASSWORD[i.id[0]] || ""} ${i.id.slice(1)}</b><span>${byW ? `<b>${i.weight != null ? fmtLb(i.weight) : "no weight"}</b> · ` : ""}${esc(describe(i))}</span></button>`).join("")}</div>`;
     $("br-list").querySelectorAll("[data-bidx]").forEach(b => b.onclick = () => startBrowse(m.map(i => i.id), +b.dataset.bidx)); }
-  ["br-stage", "br-final", "br-wave", "br-state", "br-container"].forEach(k => $(k).onchange = renderBrowseList); $("br-text").oninput = renderBrowseList;
+  ["br-stage", "br-final", "br-wave", "br-state", "br-container", "br-sort"].forEach(k => $(k).onchange = renderBrowseList); $("br-text").oninput = renderBrowseList;
   // Open Browse with filters preset — from a tapped line under "Where everything is" (state, wave or container); everything else cleared.
   function openBrowse(preset) { if (scanning) stopScan(); $("run-setup").hidden = true; currentId = null; $("result").innerHTML = ""; $("browse-setup").hidden = false; fillBrowseChoices();
-    $("br-stage").value = ""; $("br-final").value = ""; $("br-wave").value = preset.wave != null ? preset.wave : "*"; $("br-state").value = preset.state || ""; $("br-container").value = preset.container || ""; $("br-text").value = "";
+    $("br-stage").value = ""; $("br-final").value = ""; $("br-wave").value = preset.wave != null ? preset.wave : "*"; $("br-state").value = preset.state || ""; $("br-container").value = preset.container || ""; $("br-text").value = ""; $("br-sort").value = "id";
     renderBrowseList(); renderModes(); $("browse-setup").scrollIntoView({ block: "start", behavior: "smooth" }); }
   $("where").addEventListener("click", e => { const t = e.target.closest("[data-brs],[data-brw],[data-brc]"); if (!t) return;
     openBrowse(t.dataset.brs != null ? { state: t.dataset.brs } : t.dataset.brw != null ? { wave: t.dataset.brw } : { container: t.dataset.brc }); });
@@ -1254,7 +1327,7 @@
     if (!dirty || !currentId) return 0; const k = keepFields(); if (!k) return 0; const id = currentId, it = state.items[id], r = it ? it.row : {}; let n = 0;
     const put = async (field, val, cur) => { if (val.trim() !== (cur || "").trim()) { await record(mkEvent(cfg.who, id, "EDIT", { field, value: val.trim() })); n++; } };
     await put("unprinted_contents", k.uc, r.unprinted_contents); await put("unprinted_notes", k.un, [r.unprinted_notes, r.private_notes].filter(x => x && x.trim()).join("\n"));
-    await put("contents", k.lc, r.contents); await put("notes", k.ln, r.notes); const w = await saveWeight(id, it, k.wt); if (w) n += w; dirty = false; return n; }
+    await put("contents", k.lc, r.contents); await put("notes", k.ln, r.notes); const w = await saveWeight(id, it, k.wt); if (w) n += w; const v = await saveValue(id, it, k.val); if (v) n += v; dirty = false; return n; }
   async function browseGo(d) { if (!browse) return; const j = browse.i + d; if (j < 0 || j >= browse.ids.length) return; const n = await saveDirty(); browse.i = j; store.set("lot26.browse", browse); setStatus(n ? "Saved what you typed on the last one." : "", n ? "ok" : ""); showBrowse(); decorateBrowseCard(d); }
   $("browse-prev").onclick = () => browseGo(-1); $("browse-next").onclick = () => browseGo(1);
   $("browse-done").onclick = async () => { const n = await saveDirty(); browse = null; store.set("lot26.browse", null); currentId = null; $("result").innerHTML = ""; renderModes(); setStatus(n ? "Saved what you typed. Finished browsing." : "Finished browsing.", "ok"); };
