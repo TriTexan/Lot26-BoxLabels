@@ -568,7 +568,7 @@
     field: "", value: "", container: s.container || "", wave: "", location: s.location || "", photo: s.photo || "", note: s.note || "" });
 
   // ---- storage: small things in localStorage (shared with v1), events and photos in IndexedDB ----
-  const APP_VERSION = "Box app 3.17 (2026-10-03)";
+  const APP_VERSION = "Box app 3.18 (2026-10-03)";
   const $ = id => document.getElementById(id);
   const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const store = { get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } },
@@ -1275,10 +1275,10 @@
   // One current state per item, the same buckets "Where everything is" counts; plus three yes/no questions the lists answer.
   const BR_STATES = [["", "Any state"], ["none", "Not started"], ["STARTED", "Packing in progress"], ["READY", "Full — ready to seal"], ["SEALED", "Sealed, waiting for moving day"],
     ["ONBOARD", "Loaded, still at TX"], ["TRANSIT", "En route to CA"], ["DELIVERED", "At CA home, not unloaded"], ["RECEIVED", "Arrived"], ["PLACED", "In their rooms"],
-    ["photo", "With at least one photo"], ["nophoto", "Without a photo"], ["noweight", "No weight yet"], ["novalue", "No value yet"],
+    ["photo", "With at least one photo"], ["nophoto", "Without a photo"], ["noweight", "No weight yet"], ["sealednoweight", "Sealed, no weight yet"], ["novalue", "No value yet"], ["sealednovalue", "Sealed, no value yet"],
     ["must", "Must go (its wave)"], ["mustleft", "Must go — not loaded yet"], ["can", "Can go if room / may stay behind"], ["undecided", "Wave planned, must-go not answered"]];
   const inState = (i, k) => !k ? true : k === "none" ? !i.last : k === "STARTED" || k === "READY" || k === "RECEIVED" || k === "PLACED" ? !!(i.last && i.last.type === k) : k === "SEALED" ? isSealed(i)
-    : k === "ONBOARD" || k === "TRANSIT" || k === "DELIVERED" ? !!(i.loaded && !i.arrived && i.phase === k) : k === "photo" ? !!i.photos.length : k === "nophoto" ? !i.photos.length : k === "noweight" ? i.weight == null : k === "novalue" ? i.value == null
+    : k === "ONBOARD" || k === "TRANSIT" || k === "DELIVERED" ? !!(i.loaded && !i.arrived && i.phase === k) : k === "photo" ? !!i.photos.length : k === "nophoto" ? !i.photos.length : k === "noweight" ? i.weight == null : k === "sealednoweight" ? isSealed(i) && i.weight == null : k === "novalue" ? i.value == null : k === "sealednovalue" ? isSealed(i) && i.value == null
     : k === "must" ? i.must === "MUST" : k === "mustleft" ? i.must === "MUST" && !i.loaded && !i.received : k === "can" ? i.must === "OK" : k === "undecided" ? !!i.plannedWave && !i.must : true;
   const textOf = i => [i.id, i.row.contents, i.row.notes, i.row.unprinted_contents, i.row.unprinted_notes, i.row.private_notes, i.row.set_id, i.row.from_tx, disp(finalOf(i) || ""), disp(stageOf(i.row))].filter(Boolean).join("\n").toLowerCase();
   const browseSort = (arr, how) => how === "heaviest" ? arr.slice().sort((a, b) => (a.weight == null) - (b.weight == null) || (b.weight || 0) - (a.weight || 0) || (a.id < b.id ? -1 : 1))
