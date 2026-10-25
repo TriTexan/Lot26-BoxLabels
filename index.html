@@ -276,7 +276,8 @@
     <label class="field">Wave 1<input id="name-W1" type="text" maxlength="40" autocomplete="off"></label>
     <label class="field">Wave 2<input id="name-W2" type="text" maxlength="40" autocomplete="off"></label>
     <label class="field">Wave 3<input id="name-W3" type="text" maxlength="40" autocomplete="off"></label>
-    <div class="row" style="margin-top:12px"><button id="cfg-save">Save and test</button><button id="cfg-sync" class="quiet">Sync now</button></div>
+    <div class="row" style="margin-top:12px"><button id="cfg-save">Save and test</button><button id="cfg-sync" class="quiet">Sync now</button>
+      <button class="quiet" id="cfg-take-drive">Take Drive's events file as it is</button></div>
     <div class="row" style="margin-top:8px"><button id="cfg-link" class="quiet">Copy setup link for another phone</button></div>
     <div class="row" style="margin-top:8px"><button id="cfg-reset" class="quiet" hidden>Reset practice — start clean</button></div>
     <p class="note" id="sync-detail"></p>
@@ -568,7 +569,7 @@
     field: "", value: "", container: s.container || "", wave: "", location: s.location || "", photo: s.photo || "", note: s.note || "" });
 
   // ---- storage: small things in localStorage (shared with v1), events and photos in IndexedDB ----
-  const APP_VERSION = "Box app 3.18 (2026-10-03)";
+  const APP_VERSION = "Box app 3.19 (2026-10-25)";
   const $ = id => document.getElementById(id);
   const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const store = { get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } },
@@ -605,7 +606,7 @@
   let local = [], server = [], state = { items: {}, undone: new Set() }, lists = null;
   let run = store.get("lot26.run") || null;                  // {type, container, wave, count}
   let currentId = null, dirty = false, photosWaiting = 0;
-  const sync = { busy: false, again: false, lastOk: 0, lastTry: 0, lastPull: 0, error: "", code: "", server: store.get("lot26.server") || "" };
+  const sync = { busy: false, again: false, lastOk: 0, lastTry: 0, lastPull: 0, error: "", code: "", server: store.get("lot26.server") || "" , damaged: "", takeDrive: false };
   const noteServer = v => { if (!v || v === sync.server) return; sync.server = v; store.set("lot26.server", v);
     let again = 0; for (const e of local) if (e.rejected) { delete e.rejected; e.synced = false; again++; } if (again) persistLocal(); };   // the script changed: entries it refused before get one more try
   const serverOlderThan = (maj, min) => { const m = /dropbox (\d+)\.(\d+)/.exec(sync.server || ""); return !!m && (+m[1] < maj || (+m[1] === maj && +m[2] < min)); };
@@ -634,13 +635,14 @@
     if (!cfg.url || !cfg.token) { text = n ? `${n} on this phone only` : "This phone only"; cls = "quiet"; }
     else if (sync.busy) { text = n ? `Saving ${n}…` : "Checking…"; cls = "wait"; }
     else if (sync.code === "auth" || sync.code === "setup") { text = "Sync problem — tap"; cls = "bad"; }
+    else if (sync.damaged || sync.code === "file-short") { text = `Drive file damaged${n ? ` — ${n} waiting` : ""} — tap`; cls = "bad"; }
     else if (n) { text = `${n} waiting — will retry`; cls = "wait"; }
     else if (sync.error) { text = "Offline — all kept here"; cls = "wait"; }
     else if (!sync.lastOk) { text = "Not synced yet"; cls = "wait"; }
     else { text = "All saved"; cls = "ok"; }
     p.textContent = text; p.className = "pill quiet " + (cls === "quiet" ? "" : cls);
     const d = $("sync-detail");
-    d.textContent = (sync.lastOk ? `Last sync ${new Date(sync.lastOk).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}. ` : "") + (sync.error ? `Last attempt: ${sync.error}` : "") + (local.some(e => e.rejected) ? ` ${local.filter(e => e.rejected).length} entr${local.filter(e => e.rejected).length === 1 ? "y was" : "ies were"} refused by the server — see “Recorded on this phone”.` : "");
+    d.textContent = (sync.lastOk ? `Last sync ${new Date(sync.lastOk).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}. ` : "") + (sync.damaged ? sync.damaged + " " : "") + (sync.error ? `Last attempt: ${sync.error}` : "") + (local.some(e => e.rejected) ? ` ${local.filter(e => e.rejected).length} entr${local.filter(e => e.rejected).length === 1 ? "y was" : "ies were"} refused by the server — see “Recorded on this phone”.` : "");
     d.className = "note" + (sync.error ? " warn" : "");
   }
   function renderJournal() {
@@ -789,11 +791,12 @@
 
   async function syncNow(forcePull) {
     if (!cfg.url || !cfg.token) { renderPill(); return; }
-    if (sync.busy) { sync.again = true; return; }
+    if (sync.busy) { sync.again = forcePull === true ? "pull" : (sync.again || true); return; }   // a pull asked for while busy is not forgotten
     sync.busy = true; sync.lastTry = Date.now(); renderPill();
     const mode = ns();
     try {
-      let unsent = local.filter(e => !e.synced && e.type !== "PHOTO");
+      const queued = new Set((await idb.photos(mode)).map(r => r.key));
+      let unsent = local.filter(e => !e.synced && (e.type !== "PHOTO" || (!queued.has(e.event_id) && !e.rejected)));   // a photo entry with no image waiting is an orphan: the image went, the entry was never marked (3.19)
       while (unsent.length) {
         const chunk = unsent.splice(0, 100), r = await api("events", { events: chunk.map(wire) });
         const done = new Set([].concat(r.accepted || [], r.duplicates || [])), bad = {}; (r.rejected || []).forEach(x => bad[x.event_id] = x.why);
@@ -817,8 +820,16 @@
         sync.lastPull = Date.now();
         if (s.inventory_csv) { const rows = Papa.parse(s.inventory_csv, { header: true, skipEmptyLines: true }).data;
           if (rows.length && "id" in rows[0]) { inventory = { rows, loaded: new Date().toISOString(), name: "Drive", modified: s.inventory_modified, copies: s.inventory_copies }; store.set("lot26.inventory", inventory); } }
-        server = Papa.parse(s.events_csv || "", { header: true, skipEmptyLines: true }).data.filter(e => e.event_id);
-        await idb.set(mode + ":server", server).catch(() => {});
+        const parsed = Papa.parse(s.events_csv || "", { header: true, skipEmptyLines: true }), rows = parsed.data.filter(e => e.event_id);
+        const headerless = (s.events_csv || "").trim() && !(parsed.meta && parsed.meta.fields && parsed.meta.fields[0] === "event_id");
+        // The events file only grows. Everything this phone has seen in Drive, or has had Drive accept, must still be there; a pull missing more than
+        // a few rows' worth of Drive lag is a damaged or replaced file: keep this phone's copy and say so. Practice resets are meant to shrink and are
+        // handled below. "Take Drive's events file as it is" in Settings overrides once.
+        const have = new Set(rows.map(e => e.event_id)), known = new Set(server.map(e => e.event_id)); local.forEach(e => { if (e.synced && !e.rejected) known.add(e.event_id); });
+        let missing = 0; known.forEach(k => { if (!have.has(k)) missing++; });
+        const shrunk = mode === "live" && known.size >= 10 && missing > Math.max(3, Math.floor(known.size / 20)) && !sync.takeDrive;
+        if (headerless || shrunk) { sync.damaged = `Drive's events file looks damaged — ${headerless ? "its first line is not the column names" : `${rows.length} rows, and ${missing} this phone knows Drive had are gone`}. Keeping this phone's copy (${known.size} rows); nothing is lost here. Check the file's version history in Drive before anything else writes to it.`; }
+        else { sync.damaged = ""; sync.takeDrive = false; server = rows; await idb.set(mode + ":server", server).catch(() => {}); }
         if (mode === "test") await honourPracticeReset();
       }
       sync.lastOk = Date.now(); sync.error = ""; sync.code = "";
@@ -827,7 +838,7 @@
       sync.error = e.code === "auth" ? "The passphrase was not accepted." : e.code === "setup" ? "The script has no passphrase set yet." : e.name === "AbortError" ? "No answer in time — will retry." : (navigator.onLine === false ? "No connection — will retry." : (e.message || "Could not reach the sync address."));
     } finally {
       sync.busy = false; recompute(); if (currentId && !dirty) show(currentId);
-      if (sync.again) { sync.again = false; syncSoon(500); }
+      if (sync.again) { const pull = sync.again === "pull"; sync.again = false; clearTimeout(syncTimer); syncTimer = setTimeout(() => syncNow(pull), 500); }
     }
   }
   setInterval(() => { if (document.hidden || !cfg.url) return; const idle = Date.now() - Math.max(sync.lastOk, sync.lastTry);
@@ -887,12 +898,15 @@
   };
   $("cfg-save").onclick = saveSettings;
   $("cfg-sync").onclick = () => { setStatus("Syncing…"); syncNow(true).then(() => setStatus(sync.error ? "Sync did not finish: " + sync.error : "Synced.", sync.error ? "warn" : "ok")); };
+  $("cfg-take-drive").onclick = () => { if (!sync.damaged) { setStatus("Drive's copy was not refused — nothing to take.", "ok"); return; }
+    if (!confirm(`Take Drive's events file as it is, in place of this phone's copy?\n\nOnly after the file in Drive has been checked or restored on purpose. This phone's own entries are kept regardless (Recorded on this phone).`)) return;
+    sync.takeDrive = true; syncNow(true).then(() => setStatus(sync.damaged ? "Still refused: " + sync.damaged : "Taken — this phone now shows Drive's copy.", sync.damaged ? "warn" : "ok")); };
   $("cfg-link").onclick = async () => {
     if (!cfg.url || !cfg.token) { setStatus("Save the sync address and passphrase first.", "warn"); return; }
     const link = location.origin + location.pathname + "#setup=" + encodeURIComponent(btoa(JSON.stringify({ u: cfg.url, t: cfg.token })));
     try { await navigator.clipboard.writeText(link); setStatus("Setup link copied. Send it to the other phone and open it there in Chrome.", "ok"); } catch (e) { prompt("Copy this setup link:", link); }
   };
-  $("pill").onclick = () => { $("d-settings").open = true; $("d-settings").scrollIntoView({ block: "start", behavior: "smooth" }); if (cfg.url) syncNow(true); };
+  $("pill").onclick = () => { const why = sync.damaged || sync.error; if (why) setStatus(why, "warn"); $("d-settings").open = true; $("d-settings").scrollIntoView({ block: "start", behavior: "smooth" }); if (cfg.url) syncNow(true); };
   function applySetupLink() {
     const m = location.hash.match(/^#setup=(.+)$/); if (!m) return false;
     try { const o = JSON.parse(atob(decodeURIComponent(m[1]))); if (o.u && o.t) { cfg.url = o.u; cfg.token = o.t; store.set("lot26.cfg", cfg); } } catch (e) {}
@@ -1152,9 +1166,13 @@
     while (taken()) { when = new Date(when.getTime() + 1000); name = photoName(id, when, cfg.who); }   // two files from the same second never share a name
     const blob = await shrink(f, cfg.photoMax);
     const ev = mkEvent(cfg.who, id, "PHOTO", { photo: name, ts: now.toISOString(), note: chosen ? `added from the phone's photos${sane ? "; file dated " + whenText(fd.toISOString()) : ""}` : "" });
-    await idb.putPhoto({ key: ev.event_id, ns: ns(), name, blob, event: wire(ev) });
-    photosWaiting++; const small = await shrink(blob, 320); await idb.putThumb(name, small); thumbURL[name] = URL.createObjectURL(small); fullURL[name] = URL.createObjectURL(blob);
-    await record(ev); return name;
+    // Order matters (2026-10-25): the journal entry goes in FIRST, then the image is queued. The other way round, a sync already in its
+    // upload step could send the image, find no entry to mark as saved, and delete the queued image — leaving an entry "not yet saved" forever.
+    await record(ev);
+    await idb.putPhoto({ key: ev.event_id, ns: ns(), name, blob, event: wire(ev) }); photosWaiting++; syncSoon(50);
+    const small = await shrink(blob, 320); await idb.putThumb(name, small); thumbURL[name] = URL.createObjectURL(small); fullURL[name] = URL.createObjectURL(blob);
+    if (currentId === id) show(id, dirty ? keepFields() : null);
+    return name;
   }
   async function keepPhotos(files, id, chosen) {
     if (!files.length || !id) return;
@@ -1203,9 +1221,9 @@
     setStatus(`Finished. ${n} recorded in that session.` + (was && was.type === "LOADED" ? ` When ${was.container} is picked up, mark it under “Where everything is”.` : ""), "ok"); syncSoon(); };
   function renderRun() {
     $("runbar").hidden = !run; renderModes(); if (!run) return;
-    $("run-pause").textContent = scanning ? "Pause camera" : "Resume scanning";
+    $("run-pause").textContent = scanning ? "Pause camera" : starting ? "Opening the camera…" : "Resume scanning";
     const rc = run.container && state.containers[run.container];
-    $("run-what").innerHTML = `${runWords[run.type]}${run.container ? " → " + esc(run.container) : ""}${run.wave ? " · " + waveShort(run.wave) : ""}<small>${run.count} recorded this session${rc && run.type === "LOADED" ? ` · aboard ${ofLimit(rc.loadedWeight, rc.limit)}${rc.loadedNoWeight ? ` (${rc.loadedNoWeight} unweighed)` : ""}` : ""}${scanning ? "" : " — camera paused"}</small>`;
+    $("run-what").innerHTML = `${runWords[run.type]}${run.container ? " → " + esc(run.container) : ""}${run.wave ? " · " + waveShort(run.wave) : ""}<small>${run.count} recorded this session${rc && run.type === "LOADED" ? ` · aboard ${ofLimit(rc.loadedWeight, rc.limit)}${rc.loadedNoWeight ? ` (${rc.loadedNoWeight} unweighed)` : ""}` : ""}${scanning ? "" : starting ? " — camera starting" : " — camera paused"}</small>`;
   }
   let lastRunHit = "", lastRunAt = 0, blocked = false, alarmTimer = null;
   function raiseAlarm(id, v) {
@@ -1362,21 +1380,24 @@
   const zoomSteps = () => caps.zoom ? Array.from(new Set([1, 2, 3].map(z => Math.min(caps.zoom.max, Math.max(caps.zoom.min, z))))) : [];
   let starting = false, cancelStart = false;     // a second tap while the camera is still opening must not open a second camera
   async function startScan() {
-    if (scanning || starting) return; starting = true; cancelStart = false;
-    try { await startScan_(); } finally { starting = false; }
+    if (scanning || starting) return; starting = true; cancelStart = false; renderRun();   // the bar says "camera starting" from this moment, not "paused"
+    try { await startScan_(); } finally { starting = false; renderRun(); }                  // and settles either way
   }
   async function startScan_() {
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { setStatus("The camera isn't available in this viewer. Open this page in Chrome, or type the number below.", "warn"); return; }
     let s; try { s = await openCamera(); }
     catch (e) { setStatus("Camera not available here (" + (e.name || "blocked") + "). Open this page in Chrome, or type the number below.", "warn"); return; }
-    if (cancelStart) { s.getTracks().forEach(t => t.stop()); return; } stream = s;
+    // "Pause" tapped while the camera is still opening must win, whichever of the waits below it lands in (3.19: it used to be honoured only after the first).
+    const cancelled = () => { if (!cancelStart) return false; s.getTracks().forEach(t => t.stop()); if (stream === s) { stream = null; track = null; } video.srcObject = null; return true; };
+    if (cancelled()) return; stream = s;
     track = stream.getVideoTracks()[0]; caps = (track.getCapabilities && track.getCapabilities()) || {};
-    video.srcObject = stream; await video.play();
-    await getDetector();
+    video.srcObject = stream; await video.play(); if (cancelled()) return;
+    await getDetector(); if (cancelled()) return;
     if (!detector && typeof jsQR !== "function") { setStatus("The label reader did not load. Check the connection, reload the page, then try again.", "warn"); }
-    if (caps.focusMode && caps.focusMode.includes("continuous")) await tune({ focusMode: "continuous" });
-    if (caps.zoom) { const steps = zoomSteps(); camPref.zoom = steps.includes(camPref.zoom) ? camPref.zoom : steps[Math.min(1, steps.length - 1)]; await tune({ zoom: camPref.zoom }); }
+    if (caps.focusMode && caps.focusMode.includes("continuous")) { await tune({ focusMode: "continuous" }); if (cancelled()) return; }
+    if (caps.zoom) { const steps = zoomSteps(); camPref.zoom = steps.includes(camPref.zoom) ? camPref.zoom : steps[Math.min(1, steps.length - 1)]; await tune({ zoom: camPref.zoom }); if (cancelled()) return; }
     try { const all = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === "videoinput"), back = all.filter(d => /back|rear|environment/i.test(d.label)); cams = back.length ? back : all; } catch (e) { cams = []; }
+    if (cancelled()) return;
     $("scan").classList.add("on"); scanning = true; frames = 0; scanErr = ""; renderRun(); renderCamTools();
     if (detector || typeof jsQR === "function") setStatus(run ? "Hold the phone about a foot from each label in turn. Listen for the beep." : "Hold the phone about a foot from the label, QR inside the box.");
     if (navigator.wakeLock) navigator.wakeLock.request("screen").then(w => { wake = w; }).catch(() => {});
